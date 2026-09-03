@@ -38,7 +38,7 @@ const ROWS: Array<{ term: string; description: ReactNode }> = [
   {
     term: "販売価格",
     description:
-      "サービス購入画面に表示します（例: 1回利用チケット 1,980円〜）。表示価格は税込です。",
+      "サービス購入画面に表示します（例: 1回利用チケット 980円）。表示価格は税込です。",
   },
   {
     term: "商品代金以外の必要料金",

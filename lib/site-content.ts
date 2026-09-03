@@ -50,7 +50,7 @@ export const PRICING_PLANS = [
   },
   {
     name: "プレミアム",
-    price: "¥1,980",
+    price: "¥980",
     note: "税込〜 / 1回",
     points: [
       "完全版事業計画書",

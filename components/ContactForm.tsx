@@ -1,129 +1,125 @@
 "use client";
 
 import { useState } from "react";
-import type { FormEvent } from "react";
-
-const fieldClass =
-  "mt-2 w-full rounded-[16px] border border-line bg-[#fbfaf7] px-4 py-3 text-[15px] leading-7 text-foreground outline-none placeholder:text-[#94a3b8] focus:border-accent focus:bg-white focus:ring-4 focus:ring-accent/20";
 
 export function ContactForm() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [subject, setSubject] = useState("");
+  const [type, setType] = useState("一般");
   const [message, setMessage] = useState("");
-  const [submitting, setSubmitting] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
     setError(null);
-    setSubmitting(true);
+
     try {
-      const response = await fetch("/api/contact", {
+      const res = await fetch("/api/contact", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, subject, message }),
+        body: JSON.stringify({ name, email, type, message }),
       });
-      if (!response.ok) {
-        throw new Error("送信に失敗しました。");
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "送信に失敗しました。");
       }
+
       setSubmitted(true);
-    } catch {
-      setError("送信に失敗しました。時間をおいて再度お試しください。");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "送信中にエラーが発生しました。");
     } finally {
-      setSubmitting(false);
+      setLoading(false);
     }
-  }
+  };
 
   if (submitted) {
     return (
-      <div className="rounded-2xl bg-[#f7f1e6] px-4 py-5">
-        <p className="text-[15px] font-semibold">
-          お問い合わせを受け付けました（デモ）
-        </p>
-        <p className="mt-2 text-[14px] leading-7 text-muted">
-          現時点ではメール送信は行っていません。本番公開後に、運営よりご連絡する想定です。
+      <div className="rounded-lg border border-green-200 bg-green-50 p-6 text-green-900 dark:border-green-800 dark:bg-green-950/40 dark:text-green-200">
+        <h3 className="font-bold text-lg">お問い合わせを受け付けました</h3>
+        <p className="mt-2 text-sm">
+          お問い合わせいただきありがとうございます。内容を確認のうえ、担当者よりご連絡いたします。
         </p>
       </div>
     );
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-5">
+    <form onSubmit={handleSubmit} className="space-y-6">
+      {error && (
+        <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
       <div>
-        <label htmlFor="contact-name" className="block text-[13px] font-semibold">
+        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
           お名前
         </label>
         <input
-          id="contact-name"
-          name="name"
           type="text"
-          required
-          autoComplete="name"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className={fieldClass}
+          className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800"
+          placeholder="山田 太郎"
         />
       </div>
+
       <div>
-        <label htmlFor="contact-email" className="block text-[13px] font-semibold">
-          メールアドレス
+        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+          メールアドレス <span className="text-red-500">*</span>
         </label>
         <input
-          id="contact-email"
-          name="email"
           type="email"
           required
-          autoComplete="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className={fieldClass}
+          className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800"
+          placeholder="example@example.com"
         />
       </div>
+
       <div>
-        <label htmlFor="contact-subject" className="block text-[13px] font-semibold">
-          件名
+        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+          お問い合わせ種別
         </label>
-        <input
-          id="contact-subject"
-          name="subject"
-          type="text"
-          required
-          value={subject}
-          onChange={(e) => setSubject(e.target.value)}
-          className={fieldClass}
-        />
+        <select
+          value={type}
+          onChange={(e) => setType(e.target.value)}
+          className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800"
+        >
+          <option value="一般">サービスに関するご質問</option>
+          <option value="特定商取引法に基づく表記・開示請求">特定商取引法に基づく表記・開示請求</option>
+          <option value="不具合・ご要望">不具合・ご要望</option>
+          <option value="その他">その他</option>
+        </select>
       </div>
+
       <div>
-        <label htmlFor="contact-message" className="block text-[13px] font-semibold">
-          お問い合わせ内容
+        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+          お問い合わせ内容 <span className="text-red-500">*</span>
         </label>
         <textarea
-          id="contact-message"
-          name="message"
           required
-          rows={7}
+          rows={5}
           value={message}
           onChange={(e) => setMessage(e.target.value)}
-          className={`${fieldClass} resize-y`}
+          className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800"
+          placeholder="お問い合わせ内容をご記入ください。"
         />
       </div>
-      {error ? (
-        <p role="alert" className="rounded-2xl bg-[#fff2f2] px-4 py-3 text-[13px] text-[#c41e3a]">
-          {error}
-        </p>
-      ) : null}
+
       <button
         type="submit"
-        disabled={submitting}
-        className="flex h-12 w-full items-center justify-center rounded-full bg-gradient-to-r from-[#D97706] to-[#F59E0B] text-[15px] font-bold text-[#0F172A] shadow-[0_8px_20px_rgba(217,119,6,0.28)] hover:from-[#B45309] hover:to-[#D97706] disabled:cursor-not-allowed disabled:opacity-60"
+        disabled={loading}
+        className="w-full rounded-md bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:opacity-50"
       >
-        {submitting ? "送信しています…" : "送信する"}
+        {loading ? "送信中..." : "送信する"}
       </button>
-      <p className="text-[12px] leading-5 text-muted">
-        現時点ではデモ受付です。個人情報の取扱いはプライバシーポリシーをご確認ください。
-      </p>
     </form>
   );
 }
