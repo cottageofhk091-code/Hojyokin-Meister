@@ -51,14 +51,6 @@ export function MyPageDashboard() {
     }
   }
 
-  if (authLoading) {
-    return (
-      <main className="mx-auto w-full max-w-[960px] flex-1 px-5 pb-16 pt-8">
-        <p className="text-[14px] text-muted">読み込み中...</p>
-      </main>
-    );
-  }
-
   if (!user) {
     return (
       <main className="mx-auto w-full max-w-[28rem] flex-1 px-5 pb-16 pt-8">
@@ -72,6 +64,9 @@ export function MyPageDashboard() {
           メールアドレスに届く6桁の確認コードでログインしてください。保存した骨子は最大5件まで管理できます。
         </p>
         <div className="card-luxury mt-8 rounded-[24px] border border-line bg-white p-5 sm:p-7">
+          {authLoading ? (
+            <p className="mb-4 text-[13px] text-muted">セッションを確認しています...</p>
+          ) : null}
           <AuthForm />
         </div>
       </main>

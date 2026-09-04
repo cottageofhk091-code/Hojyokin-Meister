@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { ProposalDetail } from "@/components/ProposalDetail";
 
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "申請書の骨子",
 };

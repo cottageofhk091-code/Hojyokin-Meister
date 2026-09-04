@@ -46,14 +46,6 @@ export function ProposalDetail() {
     }
   }
 
-  if (authLoading || loading) {
-    return (
-      <main className="mx-auto w-full max-w-[960px] flex-1 px-5 pb-16 pt-8">
-        <p className="text-[14px] text-muted">読み込み中...</p>
-      </main>
-    );
-  }
-
   if (!user) {
     return (
       <main className="mx-auto w-full max-w-[28rem] flex-1 px-5 pb-16 pt-8">
@@ -64,8 +56,19 @@ export function ProposalDetail() {
           保存した骨子を閲覧するにはログインしてください。
         </p>
         <div className="card-luxury mt-8 rounded-[24px] border border-line bg-white p-5 sm:p-7">
+          {authLoading ? (
+            <p className="mb-4 text-[13px] text-muted">セッションを確認しています...</p>
+          ) : null}
           <AuthForm onSuccess={() => router.refresh()} />
         </div>
+      </main>
+    );
+  }
+
+  if (loading) {
+    return (
+      <main className="mx-auto w-full max-w-[960px] flex-1 px-5 pb-16 pt-8">
+        <p className="text-[14px] text-muted">読み込み中...</p>
       </main>
     );
   }

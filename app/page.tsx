@@ -3,6 +3,8 @@ import { LogoMark } from "@/components/LogoMark";
 import { HERO_SUPPORTS } from "@/lib/site-content";
 import { SITE_NAME } from "@/lib/site";
 
+export const dynamic = "force-dynamic";
+
 export default function Home() {
   return (
     <div className="flex flex-1 flex-col">

@@ -19,7 +19,7 @@ const NAV_ITEMS: Array<{ key: InfoModalKey; label: string }> = [
 ];
 
 export function Header() {
-  const { user, loading, signOut } = useAuth();
+  const { user, signOut } = useAuth();
   const [open, setOpen] = useState(false);
   const [modal, setModal] = useState<InfoModalKey | null>(null);
 
@@ -57,7 +57,7 @@ export function Header() {
               マイページ
             </Link>
             <DevPremiumToggle />
-            {loading ? null : user ? (
+            {user?.email ? (
               <button
                 type="button"
                 onClick={() => void signOut()}
@@ -118,7 +118,7 @@ export function Header() {
                 <DevPremiumToggle compact />
               </li>
               <li>
-                {user ? (
+                {user?.email ? (
                   <button
                     type="button"
                     className="block w-full rounded-xl px-3 py-2.5 text-left text-[14px] font-medium text-white/90 hover:bg-white/5"
