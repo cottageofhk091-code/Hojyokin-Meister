@@ -8,8 +8,15 @@ import {
 import { ResultView } from "@/components/ResultView";
 import { MeisterChatDock } from "@/components/MeisterChat";
 import { PlanCompare } from "@/components/PlanCompare";
+import { useAuth } from "@/components/AuthProvider";
 import { usePremium } from "@/components/PremiumProvider";
+import {
+  fetchProposals,
+  LIMIT_MESSAGE,
+  saveProposalToAccount,
+} from "@/lib/proposals-api";
 import { loadSavedPlans, resultToSavedPlan, savePlanToHistory } from "@/lib/history";
+import type { SavedPlan } from "@/lib/types";
 import {
   INDUSTRY_OPTIONS,
   SUBSIDY_TYPES,
@@ -31,6 +38,7 @@ const FIELD_CLASS =
   "mt-2 w-full rounded-[16px] border border-line bg-[#fbfaf7] px-4 py-3 text-[15px] leading-7 text-foreground outline-none placeholder:text-[#94a3b8] focus:border-accent focus:bg-white focus:ring-4 focus:ring-accent/20";
 
 export function GeneratorForm() {
+  const { user } = useAuth();
   const { isPremium } = usePremium();
   const [location, setLocation] = useState("");
   const [industryPreset, setIndustryPreset] = useState<IndustryOption | "">(
@@ -45,9 +53,11 @@ export function GeneratorForm() {
   const [mode, setMode] = useState<GenerateMode>("free");
   const [generatedMode, setGeneratedMode] = useState<GenerateMode>("free");
   const [saved, setSaved] = useState(false);
+  const [saveWarning, setSaveWarning] = useState<string | null>(null);
+  const [historyPlans, setHistoryPlans] = useState<SavedPlan[]>([]);
   const [chatOpen, setChatOpen] = useState(false);
   const resultRef = useRef<HTMLElement | null>(null);
-  const unlockedMode: GenerateMode = isPremium ? "premium" : mode;
+  const unlockedMode: GenerateMode = isPremium ? "premium" : "free";
   const industry =
     industryPreset === "その他" ? industryCustom.trim() : industryPreset;
   const canSubmit =
@@ -57,8 +67,18 @@ export function GeneratorForm() {
     userMemo.trim().length >= MIN_MEMO_LENGTH;
 
   useEffect(() => {
-    if (isPremium) setMode("premium");
+    setMode(isPremium ? "premium" : "free");
   }, [isPremium]);
+
+  useEffect(() => {
+    if (!user) {
+      setHistoryPlans(loadSavedPlans());
+      return;
+    }
+    void fetchProposals()
+      .then((data) => setHistoryPlans(data.proposals))
+      .catch(() => setHistoryPlans([]));
+  }, [user]);
 
   useEffect(() => {
     if (result) return;
@@ -66,7 +86,7 @@ export function GeneratorForm() {
       typeof window !== "undefined" &&
       new URLSearchParams(window.location.search).get("success") === "true";
     if (!isPremium && !fromCheckout) return;
-    const latest = loadSavedPlans()[0];
+    const latest = historyPlans[0];
     if (!latest?.snapshot || !isGenerateResult(latest.snapshot)) return;
     setResult(latest.snapshot);
     setGeneratedMode(latest.snapshot.mode ?? "premium");
@@ -83,7 +103,40 @@ export function GeneratorForm() {
     }
     if (latest.userMemo) setUserMemo(latest.userMemo);
     setSaved(true);
-  }, [isPremium, result]);
+  }, [historyPlans, isPremium, result]);
+
+  async function persistPlan(
+    plan: SavedPlan,
+    replaceOldest = false,
+    options?: { promptLogin?: boolean },
+  ) {
+    savePlanToHistory(plan);
+    if (!user) {
+      setSaved(true);
+      setSaveWarning(
+        options?.promptLogin
+          ? "マイページへ保存するにはログインしてください。"
+          : null,
+      );
+      setHistoryPlans(loadSavedPlans());
+      return true;
+    }
+    const result = await saveProposalToAccount(plan, replaceOldest);
+    if (result.ok) {
+      setSaved(true);
+      setSaveWarning(null);
+      setHistoryPlans(result.proposals);
+      return true;
+    }
+    if ("limitReached" in result && result.limitReached) {
+      setSaved(false);
+      setSaveWarning(LIMIT_MESSAGE);
+      return false;
+    }
+    setSaved(false);
+    setSaveWarning(result.error);
+    return false;
+  }
 
   async function generate() {
     setError(null);
@@ -118,7 +171,7 @@ export function GeneratorForm() {
           subsidyType,
           userMemo: userMemo.trim(),
           mode: "premium",
-          savedPlans: loadSavedPlans().map((item) => ({
+          savedPlans: historyPlans.map((item) => ({
             title: item.title,
             subsidyType: item.subsidyType,
             expenseItems: item.expenseItems,
@@ -145,7 +198,8 @@ export function GeneratorForm() {
       }
       setResult(data);
       setGeneratedMode(data.mode ?? "premium");
-      savePlanToHistory(
+      setSaveWarning(null);
+      await persistPlan(
         resultToSavedPlan(data, {
           location: location.trim(),
           industry,
@@ -153,7 +207,6 @@ export function GeneratorForm() {
           userMemo: userMemo.trim(),
         }),
       );
-      setSaved(true);
       requestAnimationFrame(() => {
         resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       });
@@ -173,17 +226,18 @@ export function GeneratorForm() {
     void generate();
   }
 
-  function handleSave() {
+  async function handleSave(replaceOldest = false) {
     if (!result || !subsidyType) return;
-    savePlanToHistory(
+    await persistPlan(
       resultToSavedPlan(result, {
         location: location.trim(),
         industry,
         subsidyType,
         userMemo: userMemo.trim(),
       }),
+      replaceOldest,
+      { promptLogin: true },
     );
-    setSaved(true);
   }
 
   function handleModeChange(next: GenerateMode) {
@@ -338,7 +392,9 @@ export function GeneratorForm() {
               subsidyType,
             }}
             saved={saved}
-            onSave={handleSave}
+            saveWarning={saveWarning}
+            onSave={() => void handleSave(false)}
+            onReplaceOldest={() => void handleSave(true)}
           />
         </section>
       ) : null}

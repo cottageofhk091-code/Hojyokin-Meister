@@ -19,6 +19,9 @@ export function ResultView({
   context,
   saved,
   onSave,
+  saveWarning,
+  onReplaceOldest,
+  showSave = true,
 }: {
   result: GenerateResult;
   mode: GenerateMode;
@@ -29,7 +32,10 @@ export function ResultView({
     subsidyType: string;
   };
   saved: boolean;
-  onSave: () => void;
+  onSave?: () => void;
+  saveWarning?: string | null;
+  onReplaceOldest?: () => void;
+  showSave?: boolean;
 }) {
   const premiumUnlocked = mode === "premium";
   const copyText = premiumUnlocked
@@ -76,21 +82,39 @@ ${result.advice.documents.map((item) => `- ${item}`).join("\n")}`;
             label={premiumUnlocked ? "申請書をコピペする" : "概要をコピペする"}
             variant="primary"
           />
-          <button
-            type="button"
-            onClick={onSave}
-            disabled={saved}
-            className="min-h-9 rounded-full border border-line px-4 text-[12px] font-semibold hover:bg-[#f7f1e6] disabled:opacity-70 sm:text-[13px]"
-          >
-            {saved ? "マイページに保存済み" : "マイページに保存する"}
-          </button>
-          <Link
-            href="/mypage"
-            className="inline-flex min-h-9 items-center rounded-full bg-[#0F172A] px-4 text-[12px] font-semibold text-[#FDE68A] sm:text-[13px]"
-          >
-            申請履歴を見る
-          </Link>
+          {showSave ? (
+            <>
+              <button
+                type="button"
+                onClick={() => onSave?.()}
+                disabled={saved}
+                className="min-h-9 rounded-full border border-line px-4 text-[12px] font-semibold hover:bg-[#f7f1e6] disabled:opacity-70 sm:text-[13px]"
+              >
+                {saved ? "マイページに保存済み" : "マイページに保存する"}
+              </button>
+              <Link
+                href="/mypage"
+                className="inline-flex min-h-9 items-center rounded-full bg-[#0F172A] px-4 text-[12px] font-semibold text-[#FDE68A] sm:text-[13px]"
+              >
+                申請履歴を見る
+              </Link>
+            </>
+          ) : null}
         </div>
+        {saveWarning ? (
+          <div className="mt-3 rounded-2xl border border-[#D97706]/40 bg-[#fff8ee] px-4 py-3 text-[13px] leading-6 text-[#9a3412]">
+            <p>{saveWarning}</p>
+            {onReplaceOldest ? (
+              <button
+                type="button"
+                onClick={onReplaceOldest}
+                className="mt-2 text-[12px] font-bold text-accent underline-offset-2 hover:underline"
+              >
+                最古のデータを更新して保存する
+              </button>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       <section className="card-luxury rounded-[24px] border border-line bg-white p-5 sm:p-6">

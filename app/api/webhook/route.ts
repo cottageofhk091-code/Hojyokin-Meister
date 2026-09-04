@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
+import { isValidEmail, normalizeEmail } from "@/lib/auth/session";
+import { markSubscribed } from "@/lib/store/accounts";
 
 export const runtime = "nodejs";
 
@@ -13,6 +15,15 @@ type PremiumPurchase = {
   amountTotal: number | null;
   currency: string | null;
 };
+
+function firstEmail(...values: Array<string | null | undefined>) {
+  for (const value of values) {
+    if (!value) continue;
+    const email = normalizeEmail(value);
+    if (isValidEmail(email)) return email;
+  }
+  return null;
+}
 
 export async function POST(request: Request) {
   const secretKey = process.env.STRIPE_SECRET_KEY?.trim();
@@ -77,9 +88,16 @@ export async function POST(request: Request) {
 }
 
 async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
+  const email = firstEmail(
+    session.customer_details?.email,
+    session.customer_email,
+    session.metadata?.email,
+    session.client_reference_id,
+  );
+
   const purchase: PremiumPurchase = {
     sessionId: session.id,
-    email: session.customer_details?.email ?? null,
+    email,
     clientReferenceId: session.client_reference_id ?? null,
     customerId:
       typeof session.customer === "string"
@@ -99,6 +117,17 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   await fulfillPremiumPurchase(purchase);
 }
 
-async function fulfillPremiumPurchase(_purchase: PremiumPurchase) {
-  // 将来: email / clientReferenceId をキーに、ユーザーの購入フラグをDBへ保存する。
+async function fulfillPremiumPurchase(purchase: PremiumPurchase) {
+  if (!purchase.email) {
+    console.warn(
+      "[stripe:checkout.session.completed] email が取得できないため is_subscribed を更新しませんでした。",
+      purchase.sessionId,
+    );
+    return;
+  }
+
+  await markSubscribed(purchase.email, {
+    stripe_customer_id: purchase.customerId,
+    stripe_session_id: purchase.sessionId,
+  });
 }

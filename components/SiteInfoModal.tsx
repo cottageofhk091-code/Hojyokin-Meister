@@ -8,6 +8,7 @@ import {
   FEATURE_DETAILS,
   PRICING_PLANS,
 } from "@/lib/site-content";
+import { PREMIUM_PRICE_WITH_TAX } from "@/lib/site";
 
 export type InfoModalKey = "features" | "pricing" | "faq";
 
@@ -53,7 +54,7 @@ export function SiteInfoModal({
         onClose={onClose}
       >
         <p className="mb-5 text-[13px] leading-6 text-muted">
-          プレミアムは1回あたりの決済で、完全版の事業計画書・経費テーブル・AIチャット相談を解放します。
+          プレミアムは {PREMIUM_PRICE_WITH_TAX} / 1回の決済で、完全版の事業計画書・経費テーブル・AIチャット相談を解放します。
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
           {PRICING_PLANS.map((plan) => (
@@ -81,6 +82,9 @@ export function SiteInfoModal({
               >
                 {plan.price}
               </p>
+              {plan.featured ? (
+                <p className="text-[11px] font-semibold text-white/70">{plan.note}</p>
+              ) : null}
               <ul className="mt-3 space-y-1.5 text-[12px] leading-5">
                 {plan.points.map((point) => (
                   <li key={point} className="flex gap-1.5">
@@ -109,7 +113,7 @@ export function SiteInfoModal({
                     >
                       {checkoutLoading
                         ? "決済画面へ移動中..."
-                        : "プレミアムプランを購入"}
+                        : `${PREMIUM_PRICE_WITH_TAX}で購入`}
                     </button>
                     {checkoutError ? (
                       <p className="mt-2 text-[12px] leading-5 text-[#FECACA]">

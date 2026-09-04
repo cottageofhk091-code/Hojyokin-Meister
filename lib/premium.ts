@@ -10,6 +10,14 @@ export function loadIsPremiumUser(): boolean {
 }
 
 export function saveIsPremiumUser() {
+  setIsPremiumUser(true);
+}
+
+export function setIsPremiumUser(value: boolean) {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(PREMIUM_STORAGE_KEY, "true");
+  if (value) {
+    window.localStorage.setItem(PREMIUM_STORAGE_KEY, "true");
+    return;
+  }
+  window.localStorage.removeItem(PREMIUM_STORAGE_KEY);
 }

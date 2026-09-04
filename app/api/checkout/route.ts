@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
+import { getSessionUser } from "@/lib/auth/session";
+
+export const runtime = "nodejs";
 
 export async function POST() {
   const secretKey = process.env.STRIPE_SECRET_KEY?.trim();
@@ -21,13 +24,33 @@ export async function POST() {
     );
   }
 
+  if (!priceId.startsWith("price_")) {
+    return NextResponse.json(
+      {
+        error:
+          "STRIPE_PRICE_ID_PREMIUM が Price ID（price_...）ではありません。Stripe ダッシュボードのプレミアム価格を確認してください。",
+      },
+      { status: 500 },
+    );
+  }
+
   try {
     const stripe = new Stripe(secretKey);
+    const user = await getSessionUser();
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
       line_items: [{ price: priceId, quantity: 1 }],
       success_url: `${appUrl}/?success=true`,
       cancel_url: `${appUrl}/?canceled=true`,
+      ...(user
+        ? {
+            client_reference_id: user.email,
+            customer_email: user.email,
+            metadata: { email: user.email },
+          }
+        : {
+            metadata: { source: "guest" },
+          }),
     });
 
     if (!session.url) {

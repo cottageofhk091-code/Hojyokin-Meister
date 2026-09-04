@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { LegalPage } from "@/components/LegalPage";
+import { PREMIUM_PRICE_TEXT, PREMIUM_PRICE_WITH_TAX } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: "特定商取引法に基づく表記",
@@ -38,7 +39,7 @@ const ROWS: Array<{ term: string; description: ReactNode }> = [
   {
     term: "販売価格",
     description:
-      "サービス購入画面に表示します（例: 1回利用チケット 980円）。表示価格は税込です。",
+      `サービス購入画面に表示します（例: プレミアム ${PREMIUM_PRICE_TEXT}）。表示価格は${PREMIUM_PRICE_WITH_TAX}です。`,
   },
   {
     term: "商品代金以外の必要料金",

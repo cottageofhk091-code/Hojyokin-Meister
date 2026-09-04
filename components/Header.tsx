@@ -4,6 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { Menu, X } from "lucide-react";
 import { LogoMark } from "@/components/LogoMark";
+import { useAuth } from "@/components/AuthProvider";
+import { DevPremiumToggle } from "@/components/DevPremiumToggle";
 import {
   SiteInfoModal,
   type InfoModalKey,
@@ -17,6 +19,7 @@ const NAV_ITEMS: Array<{ key: InfoModalKey; label: string }> = [
 ];
 
 export function Header() {
+  const { user, loading, signOut } = useAuth();
   const [open, setOpen] = useState(false);
   const [modal, setModal] = useState<InfoModalKey | null>(null);
 
@@ -53,6 +56,23 @@ export function Header() {
             >
               マイページ
             </Link>
+            <DevPremiumToggle />
+            {loading ? null : user ? (
+              <button
+                type="button"
+                onClick={() => void signOut()}
+                className="rounded-full px-3.5 py-2 text-[13px] font-medium text-white/70 hover:bg-white/5 hover:text-white"
+              >
+                ログアウト
+              </button>
+            ) : (
+              <Link
+                href="/login"
+                className="rounded-full px-3.5 py-2 text-[13px] font-medium text-white/80 hover:bg-white/5 hover:text-[#F59E0B]"
+              >
+                ログイン
+              </Link>
+            )}
           </nav>
 
           <button
@@ -93,6 +113,31 @@ export function Header() {
                 >
                   マイページ
                 </Link>
+              </li>
+              <li>
+                <DevPremiumToggle compact />
+              </li>
+              <li>
+                {user ? (
+                  <button
+                    type="button"
+                    className="block w-full rounded-xl px-3 py-2.5 text-left text-[14px] font-medium text-white/90 hover:bg-white/5"
+                    onClick={() => {
+                      setOpen(false);
+                      void signOut();
+                    }}
+                  >
+                    ログアウト
+                  </button>
+                ) : (
+                  <Link
+                    href="/login"
+                    className="block rounded-xl px-3 py-2.5 text-[14px] font-medium text-white/90 hover:bg-white/5"
+                    onClick={() => setOpen(false)}
+                  >
+                    ログイン
+                  </Link>
+                )}
               </li>
             </ul>
           </nav>

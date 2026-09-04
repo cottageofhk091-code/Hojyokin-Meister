@@ -24,7 +24,7 @@ export function loadSavedPlans(): SavedPlan[] {
 
 export function savePlanToHistory(plan: SavedPlan) {
   const current = loadSavedPlans().filter((item) => item.id !== plan.id);
-  const next = [plan, ...current].slice(0, 30);
+  const next = [plan, ...current].slice(0, 5);
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   return next;
 }
@@ -145,7 +145,7 @@ function uniqueHits(hits: ExpenseOverlapHit[]) {
   });
 }
 
-function isSavedPlan(value: unknown): value is SavedPlan {
+export function isSavedPlan(value: unknown): value is SavedPlan {
   if (!value || typeof value !== "object") return false;
   const plan = value as SavedPlan;
   return (

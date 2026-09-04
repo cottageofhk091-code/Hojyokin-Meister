@@ -2,6 +2,7 @@
 
 import { Lock } from "lucide-react";
 import { usePremium } from "@/components/PremiumProvider";
+import { PREMIUM_PRICE_WITH_TAX } from "@/lib/site";
 
 export function PremiumLockCard() {
   const { startPremiumCheckout, checkoutLoading, checkoutError } = usePremium();
@@ -14,13 +15,18 @@ export function PremiumLockCard() {
       <p className="mt-3 text-[14px] font-extrabold leading-6 text-white">
         🔒 プレミアムプランで完全版（全文・詳細経費）を解放
       </p>
+      <p className="mt-2 text-[13px] font-semibold text-[#FDE68A]">
+        {PREMIUM_PRICE_WITH_TAX} / 1回
+      </p>
       <button
         type="button"
         onClick={() => void startPremiumCheckout()}
         disabled={checkoutLoading}
         className="mt-4 inline-flex min-h-10 w-full items-center justify-center rounded-full bg-gradient-to-r from-[#D97706] to-[#F59E0B] px-4 text-[13px] font-bold text-[#0F172A] hover:from-[#B45309] hover:to-[#D97706] disabled:cursor-wait disabled:opacity-80"
       >
-        {checkoutLoading ? "決済画面へ移動中..." : "プレミアムプランを購入"}
+        {checkoutLoading
+          ? "決済画面へ移動中..."
+          : `${PREMIUM_PRICE_WITH_TAX}で購入`}
       </button>
       {checkoutError ? (
         <p className="mt-2 text-[12px] leading-5 text-[#FECACA]">{checkoutError}</p>

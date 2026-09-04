@@ -1,6 +1,7 @@
 "use client";
 
 import { usePremium } from "@/components/PremiumProvider";
+import { PREMIUM_PRICE_TEXT } from "@/lib/site";
 import type { GenerateMode } from "@/lib/types";
 
 export function PlanCompare({
@@ -44,7 +45,7 @@ export function PlanCompare({
             : "text-white/70 hover:text-white"
         }`}
       >
-        {checkoutLoading ? "決済画面へ移動中..." : "プレミアム"}
+        {checkoutLoading ? "決済画面へ移動中..." : `プレミアム ${PREMIUM_PRICE_TEXT}`}
       </button>
     </div>
   );

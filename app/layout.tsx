@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Noto_Sans_JP } from "next/font/google";
 import { Footer } from "@/components/Footer";
 import { Header } from "@/components/Header";
+import { AuthProvider } from "@/components/AuthProvider";
 import { PremiumProvider } from "@/components/PremiumProvider";
 import { SITE_NAME, SITE_TAGLINE } from "@/lib/site";
 import "./globals.css";
@@ -29,11 +30,13 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="ja" className={`${notoSansJP.variable} h-full antialiased`}>
       <body className="flex min-h-full flex-col font-sans">
-        <PremiumProvider>
-          <Header />
-          <div className="flex flex-1 flex-col">{children}</div>
-          <Footer />
-        </PremiumProvider>
+        <AuthProvider>
+          <PremiumProvider>
+            <Header />
+            <div className="flex flex-1 flex-col">{children}</div>
+            <Footer />
+          </PremiumProvider>
+        </AuthProvider>
       </body>
     </html>
   );

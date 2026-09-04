@@ -1,5 +1,6 @@
 import { FilePen, MessageCircle, ShieldAlert, Trophy } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { PREMIUM_PRICE_TEXT } from "@/lib/site";
 
 export const HERO_SUPPORTS: Array<{
   icon: LucideIcon;
@@ -50,8 +51,8 @@ export const PRICING_PLANS = [
   },
   {
     name: "プレミアム",
-    price: "¥980",
-    note: "税込〜 / 1回",
+    price: PREMIUM_PRICE_TEXT,
+    note: "税込 / 1回",
     points: [
       "完全版事業計画書",
       "精緻な経費テーブル",
@@ -69,7 +70,7 @@ export const FAQS = [
   },
   {
     q: "無料版とプレミアム版の違いは？",
-    a: "無料版は骨子サマリー・簡易計画書・基本アドバイスです。プレミアム版では完全版の事業計画書、精緻な経費テーブル、個別AIチャット相談、マイページでの重複管理が利用できます。",
+    a: `無料版は骨子サマリー・簡易計画書・基本アドバイスです。プレミアム版（${PREMIUM_PRICE_TEXT}・税込 / 1回）では完全版の事業計画書、精緻な経費テーブル、個別AIチャット相談、マイページでの重複管理が利用できます。`,
   },
   {
     q: "個別AIチャット相談とは？",
