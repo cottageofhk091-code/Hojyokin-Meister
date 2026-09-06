@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Noto_Sans_JP } from "next/font/google";
+import { Analytics } from "@vercel/analytics/react"; // ★追加
 import { Footer } from "@/components/Footer";
 import { Header } from "@/components/Header";
 import { AuthProvider } from "@/components/AuthProvider";
@@ -37,6 +38,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             <Footer />
           </PremiumProvider>
         </AuthProvider>
+        <Analytics /> {/* ★追加 */}
       </body>
     </html>
   );
