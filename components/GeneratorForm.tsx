@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
+import { track } from "@vercel/analytics"; // ★ Analytics の追記
 import {
   GeneratingProgress,
 } from "@/components/GeneratingStatus";
@@ -196,6 +197,13 @@ export function GeneratorForm() {
       if (!isGenerateResult(data)) {
         throw new Error("生成結果を取得できませんでした。");
       }
+
+      // ★ Vercel Analyticsに作成実績イベントを送信
+      track("application_created", {
+        subsidyType,
+        industry,
+      });
+
       setResult(data);
       setGeneratedMode(data.mode ?? "premium");
       setSaveWarning(null);
@@ -358,14 +366,14 @@ export function GeneratorForm() {
             loading ? "opacity-100" : "disabled:opacity-55"
           }`}
         >
-            {loading ? (
-              <span className="flex items-center justify-center gap-2" aria-live="polite">
-                <Spinner />
-                作成中...
-              </span>
-            ) : (
-              "申請書の骨子を作成する"
-            )}
+          {loading ? (
+            <span className="flex items-center justify-center gap-2" aria-live="polite">
+              <Spinner />
+              作成中...
+            </span>
+          ) : (
+            "申請書の骨子を作成する"
+          )}
         </button>
 
         <GeneratingProgress loading={loading} />
