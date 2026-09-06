@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
-import { track } from "@vercel/analytics"; // ★ Analytics の追記
+import { useRouter } from "next/navigation";
 import {
   GeneratingProgress,
 } from "@/components/GeneratingStatus";
@@ -39,6 +39,7 @@ const FIELD_CLASS =
   "mt-2 w-full rounded-[16px] border border-line bg-[#fbfaf7] px-4 py-3 text-[15px] leading-7 text-foreground outline-none placeholder:text-[#94a3b8] focus:border-accent focus:bg-white focus:ring-4 focus:ring-accent/20";
 
 export function GeneratorForm() {
+  const router = useRouter();
   const { user } = useAuth();
   const { isPremium } = usePremium();
   const [location, setLocation] = useState("");
@@ -198,12 +199,6 @@ export function GeneratorForm() {
         throw new Error("生成結果を取得できませんでした。");
       }
 
-      // ★ Vercel Analyticsに作成実績イベントを送信
-      track("application_created", {
-        subsidyType,
-        industry,
-      });
-
       setResult(data);
       setGeneratedMode(data.mode ?? "premium");
       setSaveWarning(null);
@@ -215,9 +210,10 @@ export function GeneratorForm() {
           userMemo: userMemo.trim(),
         }),
       );
-      requestAnimationFrame(() => {
-        resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      });
+
+      // ★ 完了ページへ遷移してページビュー計測
+      router.push("/success");
+
     } catch (err) {
       setError(
         err instanceof Error
