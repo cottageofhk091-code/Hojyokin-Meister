@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { sendGA4Event } from "@/lib/ga4-mp";
 import {
   GeminiCallError,
   completeJson,
@@ -500,6 +501,14 @@ ${JSON.stringify(savedPlans, null, 2)}`
         message: "生成結果の最終チェックに失敗しました。",
         detail: "統合後のスキーマがフロントエンドの型と一致しません。",
       });
+    }
+
+    try {
+      await sendGA4Event("subsidy_analyzed", {
+        event_category: "subsidy",
+      });
+    } catch (gaError) {
+      console.error("GA4 send error:", gaError);
     }
 
     return NextResponse.json(result);
