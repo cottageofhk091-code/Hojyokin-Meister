@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { sendGA4Event } from "@/lib/ga4-mp";
+import { supabase } from "@/lib/supabase";
 import {
   GeminiCallError,
   completeJson,
@@ -19,7 +20,7 @@ import {
   type SubsidyType,
 } from "@/lib/types";
 
-export const maxDuration = 90;
+export const maxDuration = 60;
 
 const MIN_MEMO_LENGTH = 20;
 const MIN_INDUSTRY_LENGTH = 2;
@@ -510,6 +511,16 @@ ${JSON.stringify(savedPlans, null, 2)}`
     } catch (gaError) {
       console.error("GA4 send error:", gaError);
     }
+
+    supabase.from("app_logs").insert([
+      {
+        app_name: "subsidy",
+        user_type: "unregistered",
+        action_type: "search_subsidy",
+      },
+    ]).then(({ error }) => {
+      if (error) console.error("Supabase log error:", error);
+    });
 
     return NextResponse.json(result);
   } catch (error) {
