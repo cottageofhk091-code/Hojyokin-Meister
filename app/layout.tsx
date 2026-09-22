@@ -5,6 +5,7 @@ import { Footer } from "@/components/Footer";
 import { Header } from "@/components/Header";
 import { AuthProvider } from "@/components/AuthProvider";
 import { PremiumProvider } from "@/components/PremiumProvider";
+import { VisitTracker } from "@/components/VisitTracker";
 import { SITE_NAME, SITE_TAGLINE } from "@/lib/site";
 import "./globals.css";
 
@@ -33,6 +34,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="flex min-h-full flex-col font-sans">
         <AuthProvider>
           <PremiumProvider>
+            <VisitTracker />
             <Header />
             <div className="flex flex-1 flex-col">{children}</div>
             <Footer />
