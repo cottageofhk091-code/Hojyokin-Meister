@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/supabase";
+import { supabase } from "@/lib/supabaseClient";
 
 export async function trackVisit() {
   if (typeof window === "undefined") return;
@@ -32,7 +32,7 @@ export async function trackVisit() {
 
   try {
     const { error } = await supabase.from("analytics_visits").insert({
-      app_name: "hojyokin-meister-1",
+      app_id: "hojyokin-meister-1",
       source_category: sourceCategory,
       utm_source: utmSource || null,
       referrer: referrer || null,
