@@ -2,16 +2,17 @@
 
 import { Suspense, useEffect, useState, type FormEvent } from "react";
 import { useSearchParams } from "next/navigation";
-import { createClient } from "@supabase/supabase-js";
-import { supabase } from "@/lib/supabaseClient";
-import { completeAppSession, notifyPasswordRecovery } from "@/lib/auth-client";
+import { notifyPasswordRecovery } from "@/lib/auth-client";
 import { translateAuthError } from "@/lib/auth-errors";
-import { getSupabaseAnonKey, getSupabaseUrl } from "@/lib/supabase-env";
+import {
+  isSupabaseNetworkFailure,
+  logSupabaseNetworkFailure,
+} from "@/lib/supabase-network";
 import { SITE_NAME } from "@/lib/site";
 import { useAuth } from "@/components/AuthProvider";
 
 const REDIRECT_HINT =
-  "Supabase の Authentication → URL Configuration で Redirect URLs に https://hojyokin-meister-1.vercel.app/auth/reset-password と https://hojyokin-meister-1.vercel.app/** を追加してください。";
+  "Supabase の Authentication → URL Configuration で Redirect URLs に https://hojyokin-meister-1.vercel.app/auth/reset-password と https://hojyokin-meister-1.vercel.app/api/auth/verify-reset と https://hojyokin-meister-1.vercel.app/** を追加してください。";
 
 function mergeSearchParams(nextParams: URLSearchParams | null): URLSearchParams {
   const merged = new URLSearchParams();
@@ -52,24 +53,6 @@ function formatVerifyError(error: unknown): string {
   }
 }
 
-let implicitClient: ReturnType<typeof createClient> | null = null;
-
-function getImplicitClient() {
-  if (implicitClient) return implicitClient;
-  const url = getSupabaseUrl();
-  const key = getSupabaseAnonKey();
-  if (!url || !key) return supabase;
-  implicitClient = createClient(url, key, {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: true,
-      flowType: "implicit",
-    },
-  });
-  return implicitClient;
-}
-
 function ResetPasswordInner() {
   const nextSearchParams = useSearchParams();
   const { applySession } = useAuth();
@@ -91,72 +74,54 @@ function ResetPasswordInner() {
           searchParams.get("token") ||
           searchParams.get("code");
         const type = searchParams.get("type") || "recovery";
-        const accessToken = searchParams.get("access_token");
-        const refreshToken = searchParams.get("refresh_token");
 
         console.info("[auth.reset-password] params", {
           has_token_hash: Boolean(searchParams.get("token_hash")),
           has_token: Boolean(searchParams.get("token")),
           has_code: Boolean(searchParams.get("code")),
           type,
+          reset: searchParams.get("reset"),
           href: typeof window !== "undefined" ? window.location.href : "",
         });
 
         if (searchParams.get("error")) {
           throw new Error(
-            searchParams.get("error_description") ||
+            searchParams.get("reason") ||
+              searchParams.get("error_description") ||
               searchParams.get("error") ||
               "確認リンクの検証に失敗しました。",
           );
         }
 
-        const auth = getImplicitClient();
+        if (searchParams.get("reset") === "1") {
+          if (cancelled) return;
+          notifyPasswordRecovery();
+          window.history.replaceState({}, "", "/auth/reset-password");
+          setStatus("form");
+          setMessage("");
+          setDetail(null);
+          return;
+        }
 
-        if (accessToken && refreshToken) {
-          const { error } = await auth.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken,
-          });
-          if (error) throw error;
-        } else if (token_hash) {
-          const first = await supabase.auth.verifyOtp({
-            token_hash,
-            type: type as any,
-          });
-          let data = first.data;
-          let error = first.error;
-          if (error) {
-            console.error("Password reset verifyOtp error:", error);
-            const retry = await auth.auth.verifyOtp({
-              token_hash,
-              type: type as any,
-            });
-            data = retry.data;
-            error = retry.error;
-          }
-          if (error) {
-            const code = searchParams.get("code");
-            if (code && code !== searchParams.get("token_hash")) {
-              const exchanged = await supabase.auth.exchangeCodeForSession(code);
-              if (exchanged.error) {
-                console.error("Password reset verifyOtp error:", error);
-                throw error;
-              }
-            } else {
-              console.error("Password reset verifyOtp error:", error);
-              throw error;
-            }
-          } else if (!data.session) {
-            throw new Error("再設定用セッションを確立できませんでした。");
-          }
-        } else {
-          const existing = await auth.auth.getSession();
-          const fallback = await supabase.auth.getSession();
-          if (!existing.data.session && !fallback.data.session) {
-            throw new Error(
-              "リンクに token_hash / code が含まれていません。メール内のボタンから開き直してください。",
-            );
-          }
+        const res = await fetch("/api/auth/verify-reset", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({
+            token_hash: token_hash || undefined,
+            type,
+          }),
+        }).catch((error: unknown) => {
+          logSupabaseNetworkFailure("auth.reset-password.verify", error);
+          throw error;
+        });
+        const data = (await res.json().catch(() => ({}))) as {
+          ok?: boolean;
+          verified?: boolean;
+          error?: string;
+        };
+        if (!res.ok || !data.ok) {
+          throw new Error(data.error || "確認リンクの検証に失敗しました。");
         }
 
         if (cancelled) return;
@@ -167,9 +132,14 @@ function ResetPasswordInner() {
         setDetail(null);
       } catch (err) {
         if (cancelled) return;
+        logSupabaseNetworkFailure("auth.reset-password.verify", err);
         console.error("Password reset verifyOtp error:", err);
         setStatus("error");
-        setMessage(translateAuthError(err));
+        setMessage(
+          isSupabaseNetworkFailure(err)
+            ? "通信に失敗しました。しばらくしてから再度お試しください。"
+            : translateAuthError(err),
+        );
         setDetail(`${formatVerifyError(err)}\n\n${REDIRECT_HINT}`);
       }
     })();
@@ -192,20 +162,31 @@ function ResetPasswordInner() {
     setBusy(true);
     setMessage("");
     try {
-      const auth = getImplicitClient();
-      let { error } = await auth.auth.updateUser({ password });
-      if (error) {
-        const retry = await supabase.auth.updateUser({ password });
-        error = retry.error;
+      const res = await fetch("/api/auth/update-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ password, passwordConfirm }),
+      }).catch((error: unknown) => {
+        logSupabaseNetworkFailure("auth.reset-password.update", error);
+        throw error;
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        email?: string;
+        is_subscribed?: boolean;
+        free_credits?: number;
+        error?: string;
+      };
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || "パスワードの更新に失敗しました。");
       }
-      if (error) throw error;
-      const session =
-        (await auth.auth.getSession()).data.session ||
-        (await supabase.auth.getSession()).data.session;
-      const token = session?.access_token;
-      if (token) {
-        const completed = await completeAppSession(token, false);
-        if (completed.email) applySession(completed);
+      if (data.email) {
+        applySession({
+          email: data.email,
+          is_subscribed: Boolean(data.is_subscribed),
+          free_credits: Number(data.free_credits ?? 0),
+        });
       }
       setStatus("done");
       setMessage("パスワードを更新しました。トップページでログイン済みです。");
@@ -213,6 +194,7 @@ function ResetPasswordInner() {
         window.location.replace("/");
       }, 900);
     } catch (err) {
+      logSupabaseNetworkFailure("auth.reset-password.update", err);
       console.error("[auth.reset-password] update:", err);
       setMessage(translateAuthError(err));
       setDetail(formatVerifyError(err));

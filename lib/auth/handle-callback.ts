@@ -14,7 +14,7 @@ export async function handleEmailAuthCallback(req: Request): Promise<NextRespons
   const isRecovery = (typeRaw || "").toLowerCase() === "recovery";
 
   if (isRecovery) {
-    const dest = new URL("/auth/reset-password", `${base}/`);
+    const dest = new URL("/api/auth/verify-reset", `${base}/`);
     dest.search = url.search;
     dest.searchParams.set("type", "recovery");
     if (tokenHash && !dest.searchParams.get("token_hash")) {

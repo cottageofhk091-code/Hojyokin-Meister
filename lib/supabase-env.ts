@@ -17,6 +17,20 @@ function isPlaceholderUrl(url: string): boolean {
   return !url || url.includes("placeholder.supabase.co");
 }
 
+export function isValidPublicSupabaseUrl(url: string | null | undefined): boolean {
+  if (!url) return false;
+  try {
+    const parsed = new URL(url);
+    return (
+      (parsed.protocol === "https:" || parsed.protocol === "http:") &&
+      Boolean(parsed.hostname) &&
+      parsed.hostname !== "placeholder.supabase.co"
+    );
+  } catch {
+    return false;
+  }
+}
+
 function isPlaceholderKey(key: string): boolean {
   const normalized = key.toLowerCase();
   return (
@@ -33,7 +47,8 @@ export function getSupabaseUrl(): string | null {
     /\/$/,
     "",
   );
-  return isPlaceholderUrl(url) ? null : url;
+  if (isPlaceholderUrl(url) || !isValidPublicSupabaseUrl(url)) return null;
+  return url;
 }
 
 export function getSupabaseAnonKey(): string | null {

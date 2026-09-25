@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 
 export const SESSION_COOKIE = "aim_session";
 export const OTP_COOKIE = "aim_otp";
+export const RECOVERY_COOKIE = "aim_recovery";
 
 export function getAuthSecret() {
   const secret =

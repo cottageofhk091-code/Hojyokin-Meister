@@ -6,6 +6,7 @@ import type { EmailOtpType } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabaseClient";
 import { translateAuthError } from "@/lib/auth-errors";
 import { notifyPasswordRecovery, notifySignupConfirmed } from "@/lib/auth-client";
+import { logSupabaseNetworkFailure } from "@/lib/supabase-network";
 
 const OTP_TYPES = new Set<EmailOtpType>([
   "signup",
@@ -101,6 +102,7 @@ export default function AuthContinuePage() {
       } catch (err) {
         if (cancelled) return;
         const raw = err instanceof Error ? err.message : String(err);
+        logSupabaseNetworkFailure("auth.continue", err);
         console.error("[auth.continue] failed:", raw, err);
         setMessage(translateAuthError(err));
       }

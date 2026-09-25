@@ -10,6 +10,7 @@ import {
   markPendingSignup,
 } from "@/lib/auth-client";
 import { translateAuthError } from "@/lib/auth-errors";
+import { logSupabaseNetworkFailure } from "@/lib/supabase-network";
 
 const INPUT_CLASS =
   "mt-2 w-full rounded-[16px] border border-line bg-[#fbfaf7] px-4 py-3 text-[15px] outline-none focus:border-accent focus:bg-white focus:ring-4 focus:ring-accent/20";
@@ -53,6 +54,7 @@ export function AuthForm({
       await refresh();
       onSuccess?.();
     } catch (err) {
+      logSupabaseNetworkFailure("auth.login", err);
       setError(translateAuthError(err));
     } finally {
       setLoading(false);

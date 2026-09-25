@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import { supabase } from "@/lib/supabaseClient";
-import { completeAppSession, type AppSessionPayload } from "@/lib/auth-client";
+import { type AppSessionPayload } from "@/lib/auth-client";
 import { translateAuthError } from "@/lib/auth-errors";
+import { logSupabaseNetworkFailure } from "@/lib/supabase-network";
 
 export function PasswordResetModal({
   open,
@@ -44,17 +44,26 @@ export function PasswordResetModal({
     }
     setBusy(true);
     try {
-      const { error: authError } = await supabase.auth.updateUser({ password });
-      if (authError) throw authError;
-      const { data } = await supabase.auth.getSession();
-      const token = data.session?.access_token;
-      if (token) {
-        const session = await completeAppSession(token, false);
-        if (session.email) onCompleted(session);
+      const res = await fetch("/api/auth/update-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ password, passwordConfirm }),
+      }).catch((err: unknown) => {
+        logSupabaseNetworkFailure("auth.update-password.modal", err);
+        throw err;
+      });
+      const data = (await res.json().catch(() => ({}))) as AppSessionPayload & {
+        error?: string;
+      };
+      if (!res.ok || !data.email) {
+        throw new Error(data.error || "パスワードの更新に失敗しました。");
       }
+      onCompleted(data);
       setDone(true);
       window.setTimeout(() => onClose(), 800);
     } catch (err) {
+      logSupabaseNetworkFailure("auth.update-password.modal", err);
       setError(translateAuthError(err));
     } finally {
       setBusy(false);

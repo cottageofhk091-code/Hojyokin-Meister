@@ -4,6 +4,7 @@ import {
   getSupabaseServiceRoleKey,
   getSupabaseUrl,
 } from "@/lib/supabase-env";
+import { logSupabaseNetworkFailure } from "@/lib/supabase-network";
 
 export const EMAIL_OTP_TYPES = new Set<EmailOtpType>([
   "signup",
@@ -31,6 +32,16 @@ export type VerifyOtpResult = {
   refresh_token: string | null;
 };
 
+function missingEnvError() {
+  console.error(
+    "Supabase サーバーとの通信に失敗しました。環境変数（NEXT_PUBLIC_SUPABASE_URL）を確認してください。",
+    { hasUrl: Boolean(getSupabaseUrl()), hasKey: Boolean(getSupabaseAnonKey() || getSupabaseServiceRoleKey()) },
+  );
+  return new Error(
+    "Supabase サーバーとの通信に失敗しました。環境変数（NEXT_PUBLIC_SUPABASE_URL）を確認してください。",
+  );
+}
+
 function otpErrorMessage(lastError: unknown): string {
   if (lastError instanceof Error) return lastError.message;
   if (typeof lastError === "object" && lastError && "message" in lastError) {
@@ -39,40 +50,51 @@ function otpErrorMessage(lastError: unknown): string {
   return "verifyOtp に失敗しました";
 }
 
+function createVerifyClient() {
+  const supabaseUrl = getSupabaseUrl();
+  const key = getSupabaseAnonKey() || getSupabaseServiceRoleKey();
+  if (!supabaseUrl || !key) {
+    throw missingEnvError();
+  }
+  return createClient(supabaseUrl, key, {
+    auth: { persistSession: false, autoRefreshToken: false, flowType: "implicit" },
+  });
+}
+
 async function verifyWithTypes(
   tokenHash: string,
   types: EmailOtpType[],
 ): Promise<VerifyOtpResult> {
-  const supabaseUrl = getSupabaseUrl();
-  const key = getSupabaseAnonKey() || getSupabaseServiceRoleKey();
-  if (!supabaseUrl || !key) {
-    throw new Error("認証サービスが設定されていません。");
-  }
-
-  const supabase = createClient(supabaseUrl, key, {
-    auth: { persistSession: false, autoRefreshToken: false, flowType: "implicit" },
-  });
+  const supabase = createVerifyClient();
 
   let lastError: unknown = null;
   for (const type of types) {
-    const { data, error } = await supabase.auth.verifyOtp({
-      token_hash: tokenHash,
-      type,
-    });
-    if (!error && data.user?.email) {
-      return {
-        email: data.user.email.trim().toLowerCase(),
+    try {
+      const { data, error } = await supabase.auth.verifyOtp({
+        token_hash: tokenHash,
         type,
-        access_token: data.session?.access_token ?? null,
-        refresh_token: data.session?.refresh_token ?? null,
-      };
+      });
+      if (!error && data.user?.email) {
+        return {
+          email: data.user.email.trim().toLowerCase(),
+          type,
+          access_token: data.session?.access_token ?? null,
+          refresh_token: data.session?.refresh_token ?? null,
+        };
+      }
+      lastError = error;
+      if (error instanceof TypeError || (error as { status?: number } | null)?.status === 0) {
+        logSupabaseNetworkFailure("verifyOtp", error);
+      }
+      console.error("[verifyOtp] failed", {
+        type,
+        message: error?.message,
+        status: (error as { status?: number } | null)?.status,
+      });
+    } catch (caught) {
+      lastError = caught;
+      logSupabaseNetworkFailure("verifyOtp", caught);
     }
-    lastError = error;
-    console.error("[verifyOtp] failed", {
-      type,
-      message: error?.message,
-      status: (error as { status?: number } | null)?.status,
-    });
   }
 
   throw new Error(otpErrorMessage(lastError));
@@ -89,35 +111,34 @@ export async function verifyRecoveryOtp(input: {
   tokenHash: string;
   typeRaw?: string | null;
 }): Promise<VerifyOtpResult> {
-  const supabaseUrl = getSupabaseUrl();
-  const key = getSupabaseAnonKey() || getSupabaseServiceRoleKey();
-  if (!supabaseUrl || !key) {
-    throw new Error("認証サービスが設定されていません。");
-  }
-  const supabase = createClient(supabaseUrl, key, {
-    auth: { persistSession: false, autoRefreshToken: false, flowType: "implicit" },
-  });
+  const supabase = createVerifyClient();
   const token_hash = input.tokenHash;
   const type = input.typeRaw;
-  const { data, error } = await supabase.auth.verifyOtp({
-    token_hash,
-    type: (type as EmailOtpType) || "recovery",
-  });
-  if (error) {
-    console.error("[verifyOtp.recovery] failed:", error.message, {
-      type: type || "recovery",
-      error,
+  try {
+    const { data, error } = await supabase.auth.verifyOtp({
+      token_hash,
+      type: (type as EmailOtpType) || "recovery",
     });
-    throw error;
+    if (error) {
+      logSupabaseNetworkFailure("verifyOtp.recovery", error);
+      console.error("[verifyOtp.recovery] failed:", error.message, {
+        type: type || "recovery",
+        error,
+      });
+      throw error;
+    }
+    const email = data.user?.email?.trim().toLowerCase();
+    if (!email) {
+      throw new Error("再設定用セッションを確立できませんでした。");
+    }
+    return {
+      email,
+      type: ((type as EmailOtpType) || "recovery") as EmailOtpType,
+      access_token: data.session?.access_token ?? null,
+      refresh_token: data.session?.refresh_token ?? null,
+    };
+  } catch (caught) {
+    logSupabaseNetworkFailure("verifyOtp.recovery", caught);
+    throw caught;
   }
-  const email = data.user?.email?.trim().toLowerCase();
-  if (!email) {
-    throw new Error("再設定用セッションを確立できませんでした。");
-  }
-  return {
-    email,
-    type: ((type as EmailOtpType) || "recovery") as EmailOtpType,
-    access_token: data.session?.access_token ?? null,
-    refresh_token: data.session?.refresh_token ?? null,
-  };
 }
