@@ -20,14 +20,29 @@ export function isOtpType(value: string | null): value is EmailOtpType {
 
 function typesToTry(typeRaw: string | null): EmailOtpType[] {
   const preferred = isOtpType(typeRaw) ? [typeRaw] : [];
-  const fallback: EmailOtpType[] = ["signup", "email", "magiclink"];
+  const fallback: EmailOtpType[] = ["signup", "email", "magiclink", "recovery"];
   return [...preferred, ...fallback.filter((type) => !preferred.includes(type))];
 }
 
-export async function verifyEmailOtp(input: {
-  tokenHash: string;
-  typeRaw: string | null;
-}): Promise<{ email: string; type: EmailOtpType }> {
+export type VerifyOtpResult = {
+  email: string;
+  type: EmailOtpType;
+  access_token: string | null;
+  refresh_token: string | null;
+};
+
+function otpErrorMessage(lastError: unknown): string {
+  if (lastError instanceof Error) return lastError.message;
+  if (typeof lastError === "object" && lastError && "message" in lastError) {
+    return String((lastError as { message?: unknown }).message);
+  }
+  return "verifyOtp に失敗しました";
+}
+
+async function verifyWithTypes(
+  tokenHash: string,
+  types: EmailOtpType[],
+): Promise<VerifyOtpResult> {
   const supabaseUrl = getSupabaseUrl();
   const key = getSupabaseAnonKey() || getSupabaseServiceRoleKey();
   if (!supabaseUrl || !key) {
@@ -39,27 +54,46 @@ export async function verifyEmailOtp(input: {
   });
 
   let lastError: unknown = null;
-  for (const type of typesToTry(input.typeRaw)) {
+  for (const type of types) {
     const { data, error } = await supabase.auth.verifyOtp({
-      token_hash: input.tokenHash,
+      token_hash: tokenHash,
       type,
     });
     if (!error && data.user?.email) {
-      return { email: data.user.email.trim().toLowerCase(), type };
+      return {
+        email: data.user.email.trim().toLowerCase(),
+        type,
+        access_token: data.session?.access_token ?? null,
+        refresh_token: data.session?.refresh_token ?? null,
+      };
     }
     lastError = error;
-    console.error("[verifyEmailOtp] failed", {
+    console.error("[verifyOtp] failed", {
       type,
       message: error?.message,
       status: (error as { status?: number } | null)?.status,
     });
   }
 
-  const message =
-    lastError instanceof Error
-      ? lastError.message
-      : typeof lastError === "object" && lastError && "message" in lastError
-        ? String((lastError as { message?: unknown }).message)
-        : "verifyOtp に失敗しました";
-  throw new Error(message);
+  throw new Error(otpErrorMessage(lastError));
+}
+
+export async function verifyEmailOtp(input: {
+  tokenHash: string;
+  typeRaw: string | null;
+}): Promise<VerifyOtpResult> {
+  return verifyWithTypes(input.tokenHash, typesToTry(input.typeRaw));
+}
+
+export async function verifyRecoveryOtp(input: {
+  tokenHash: string;
+  typeRaw?: string | null;
+}): Promise<VerifyOtpResult> {
+  const preferred = isOtpType(input.typeRaw ?? null) ? [input.typeRaw as EmailOtpType] : [];
+  const recoveryTypes: EmailOtpType[] = ["recovery", "email", "magiclink"];
+  const types = [
+    ...preferred,
+    ...recoveryTypes.filter((type) => !preferred.includes(type)),
+  ];
+  return verifyWithTypes(input.tokenHash, types);
 }

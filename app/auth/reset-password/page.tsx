@@ -1,12 +1,113 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import type { EmailOtpType } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabaseClient";
 import { completeAppSession, notifyPasswordRecovery } from "@/lib/auth-client";
 import { translateAuthError } from "@/lib/auth-errors";
 import { SITE_NAME } from "@/lib/site";
 import { useAuth } from "@/components/AuthProvider";
+
+const REDIRECT_HINT =
+  "Supabase の Authentication → URL Configuration で Site URL と Redirect URLs に https://hojyokin-meister-1.vercel.app/auth/reset-password および https://hojyokin-meister-1.vercel.app/** が含まれているか確認してください。";
+
+const SESSION_CACHE_KEY = "aim_recovery_session";
+
+type CachedSession = { access_token: string; refresh_token: string };
+
+let recoveryBootstrap: Promise<void> | null = null;
+
+function readCachedSession(): CachedSession | null {
+  try {
+    const raw = sessionStorage.getItem(SESSION_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as CachedSession;
+    if (parsed.access_token && parsed.refresh_token) return parsed;
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+async function applyRecoverySession(tokens: CachedSession) {
+  sessionStorage.setItem(SESSION_CACHE_KEY, JSON.stringify(tokens));
+  const { error } = await supabase.auth.setSession(tokens);
+  if (error) throw error;
+}
+
+async function bootstrapRecoverySession() {
+  const existing = await supabase.auth.getSession();
+  if (existing.data.session) return;
+
+  const cached = readCachedSession();
+  if (cached) {
+    await applyRecoverySession(cached);
+    return;
+  }
+
+  const url = new URL(window.location.href);
+  const hashParams = new URLSearchParams(url.hash.replace(/^#/, ""));
+  const tokenHash =
+    url.searchParams.get("token_hash") || hashParams.get("token_hash");
+  const typeRaw =
+    url.searchParams.get("type") || hashParams.get("type") || "recovery";
+  const code = url.searchParams.get("code") || hashParams.get("code");
+  const accessToken =
+    hashParams.get("access_token") || url.searchParams.get("access_token");
+  const refreshToken =
+    hashParams.get("refresh_token") || url.searchParams.get("refresh_token");
+
+  if (url.searchParams.get("error") || hashParams.get("error")) {
+    const reason =
+      url.searchParams.get("error_description") ||
+      hashParams.get("error_description") ||
+      url.searchParams.get("error") ||
+      "確認リンクの検証に失敗しました。";
+    throw new Error(reason);
+  }
+
+  if (accessToken && refreshToken) {
+    await applyRecoverySession({
+      access_token: accessToken,
+      refresh_token: refreshToken,
+    });
+  } else if (tokenHash) {
+    const res = await fetch("/api/auth/verify-recovery", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        token_hash: tokenHash,
+        type: typeRaw || "recovery",
+      }),
+    });
+    const data = (await res.json().catch(() => ({}))) as {
+      error?: string;
+      access_token?: string;
+      refresh_token?: string;
+    };
+    if (!res.ok || !data.access_token || !data.refresh_token) {
+      console.error("[auth.reset-password] verify-recovery:", data.error);
+      throw new Error(data.error || "確認リンクの検証に失敗しました。");
+    }
+    await applyRecoverySession({
+      access_token: data.access_token,
+      refresh_token: data.refresh_token,
+    });
+  } else if (code) {
+    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    if (error) {
+      console.error("[auth.reset-password] exchangeCodeForSession:", error.message, error);
+      throw error;
+    }
+  } else {
+    throw new Error("リンクが無効か、有効期限が切れています。");
+  }
+
+  const { data } = await supabase.auth.getSession();
+  if (!data.session) {
+    throw new Error("再設定用セッションを確立できませんでした。");
+  }
+  window.history.replaceState({}, "", "/auth/reset-password");
+}
 
 export default function ResetPasswordPage() {
   const { applySession } = useAuth();
@@ -18,52 +119,27 @@ export default function ResetPasswordPage() {
 
   useEffect(() => {
     let cancelled = false;
+    if (!recoveryBootstrap) {
+      recoveryBootstrap = bootstrapRecoverySession().catch((err) => {
+        recoveryBootstrap = null;
+        throw err;
+      });
+    }
 
-    void (async () => {
-      try {
-        const url = new URL(window.location.href);
-        const hashParams = new URLSearchParams(url.hash.replace(/^#/, ""));
-        const tokenHash =
-          url.searchParams.get("token_hash") || hashParams.get("token_hash");
-        const typeRaw =
-          url.searchParams.get("type") || hashParams.get("type") || "recovery";
-        const type = (typeRaw as EmailOtpType) || "recovery";
-        const code = url.searchParams.get("code");
-
-        if (tokenHash) {
-          const { error } = await supabase.auth.verifyOtp({
-            token_hash: tokenHash,
-            type,
-          });
-          if (error) {
-            console.error("[auth.reset-password] verifyOtp:", error.message, error);
-            throw error;
-          }
-        } else if (code) {
-          const { error } = await supabase.auth.exchangeCodeForSession(code);
-          if (error) {
-            console.error("[auth.reset-password] exchangeCodeForSession:", error.message, error);
-            throw error;
-          }
-        }
-
-        const { data } = await supabase.auth.getSession();
-        if (!data.session) {
-          throw new Error("リンクが無効か、有効期限が切れています。");
-        }
+    void recoveryBootstrap
+      .then(() => {
         if (cancelled) return;
         notifyPasswordRecovery();
-        window.history.replaceState({}, "", "/auth/reset-password");
         setStatus("form");
         setMessage("");
-      } catch (err) {
+      })
+      .catch((err) => {
         if (cancelled) return;
         const raw = err instanceof Error ? err.message : String(err);
         console.error("[auth.reset-password] failed:", raw, err);
         setStatus("error");
-        setMessage(translateAuthError(err));
-      }
-    })();
+        setMessage(`${translateAuthError(err)}\n\n${REDIRECT_HINT}`);
+      });
 
     return () => {
       cancelled = true;
@@ -90,6 +166,11 @@ export default function ResetPasswordPage() {
       if (token) {
         const session = await completeAppSession(token, false);
         if (session.email) applySession(session);
+      }
+      try {
+        sessionStorage.removeItem(SESSION_CACHE_KEY);
+      } catch {
+        // ignore
       }
       setStatus("done");
       setMessage("パスワードを更新しました。トップページでログイン済みです。");
@@ -167,10 +248,10 @@ export default function ResetPasswordPage() {
 
         {status === "error" ? (
           <a
-            href="/login"
+            href="/login?mode=forgot"
             className="mt-6 inline-flex min-h-12 w-full items-center justify-center rounded-full border border-line px-5 text-[14px] font-bold"
           >
-            ログインへ戻る
+            再設定メールを送り直す
           </a>
         ) : null}
       </section>

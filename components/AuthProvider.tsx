@@ -24,6 +24,7 @@ import {
   type AppSessionPayload,
 } from "@/lib/auth-client";
 import { PasswordResetModal } from "@/components/PasswordResetModal";
+import { SignupWelcomeModal } from "@/components/SignupWelcomeModal";
 
 export type AuthUser = {
   email: string;
@@ -379,29 +380,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return (
     <AuthContext.Provider value={value}>
       {children}
-      {welcomeMessage ? (
-        <div
-          role="dialog"
-          aria-modal="true"
-          className="fixed inset-0 z-[95] flex items-center justify-center bg-[#0F172A]/50 px-5"
-          onClick={() => setWelcomeMessage(null)}
-        >
-          <div
-            className="card-luxury w-full max-w-[420px] rounded-[24px] border border-line bg-white p-7"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="text-[20px] font-extrabold tracking-tight text-brand">登録完了</h3>
-            <p className="mt-3 text-[15px] leading-7 font-semibold">{welcomeMessage}</p>
-            <button
-              type="button"
-              onClick={() => setWelcomeMessage(null)}
-              className="mt-6 inline-flex min-h-11 w-full items-center justify-center rounded-full bg-gradient-to-r from-[#D97706] to-[#F59E0B] px-4 text-[14px] font-bold text-[#0F172A]"
-            >
-              はじめる
-            </button>
-          </div>
-        </div>
-      ) : null}
+      <SignupWelcomeModal
+        open={Boolean(welcomeMessage)}
+        onClose={() => setWelcomeMessage(null)}
+      />
       <PasswordResetModal
         open={passwordRecoveryOpen}
         onClose={() => {

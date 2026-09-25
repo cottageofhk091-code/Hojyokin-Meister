@@ -106,6 +106,7 @@ export async function generateAuthActionLink(input: {
     input.type === "recovery"
       ? `${getPublicAppUrl(input.req)}/auth/reset-password`
       : `${getPublicAppUrl(input.req)}/auth/callback?registered=true`;
+  console.info("[generateLink] redirectTo", { type: input.type, redirectTo });
 
   const result =
     input.type === "signup"
