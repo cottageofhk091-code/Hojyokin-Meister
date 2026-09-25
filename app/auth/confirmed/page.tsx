@@ -1,24 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { EmailOtpType } from "@supabase/supabase-js";
-import { supabase } from "@/lib/supabaseClient";
 import { completeAppSession, notifySignupConfirmed } from "@/lib/auth-client";
 import { translateAuthError } from "@/lib/auth-errors";
 import { SITE_NAME } from "@/lib/site";
-
-const OTP_TYPES = new Set<EmailOtpType>([
-  "signup",
-  "invite",
-  "magiclink",
-  "recovery",
-  "email_change",
-  "email",
-]);
+import { supabase } from "@/lib/supabaseClient";
 
 const SUCCESS_TITLE = "認証が完了しました。元の画面（タブ）に戻ってお続けください";
 const SUCCESS_BODY =
   "このウィンドウは閉じて構いません。元々開いていた画面でご利用を続けてください。";
+const REDIRECT_HINT =
+  "Supabase の Authentication → URL Configuration で Site URL と Redirect URLs に https://hojyokin-meister-1.vercel.app/** が含まれているか確認してください。";
 
 export default function AuthConfirmedPage() {
   const [status, setStatus] = useState<"working" | "ok" | "error">("working");
@@ -30,42 +22,33 @@ export default function AuthConfirmedPage() {
     const finishOk = (bonusGranted?: boolean) => {
       if (cancelled) return;
       notifySignupConfirmed({ bonusGranted: Boolean(bonusGranted) });
-      setStatus("ok");
-      setMessage(SUCCESS_BODY);
+      window.location.replace("/?registered=true");
     };
 
     void (async () => {
       try {
         const url = new URL(window.location.href);
-        const hashParams = new URLSearchParams(url.hash.replace(/^#/, ""));
-        const tokenHash =
-          url.searchParams.get("token_hash") || hashParams.get("token_hash");
-        const typeRaw = url.searchParams.get("type") || hashParams.get("type");
-        const type =
-          typeRaw && OTP_TYPES.has(typeRaw as EmailOtpType)
-            ? (typeRaw as EmailOtpType)
-            : null;
-        const code = url.searchParams.get("code");
+        if (url.searchParams.get("error") === "1") {
+          const reason = url.searchParams.get("reason") || "確認リンクの検証に失敗しました。";
+          console.error("[auth.confirmed] callback error:", reason);
+          throw new Error(reason);
+        }
 
-        if (tokenHash && type) {
-          const { error } = await supabase.auth.verifyOtp({
-            token_hash: tokenHash,
-            type,
-          });
-          if (error) throw error;
-        } else if (code) {
-          const { error } = await supabase.auth.exchangeCodeForSession(code);
-          if (error) throw error;
+        const tokenHash = url.searchParams.get("token_hash");
+        const code = url.searchParams.get("code");
+        if (tokenHash || code) {
+          const dest = new URL("/auth/callback", window.location.origin);
+          dest.search = url.search;
+          dest.hash = url.hash;
+          window.location.replace(`${dest.pathname}${dest.search}${dest.hash}`);
+          return;
         }
 
         const { data } = await supabase.auth.getSession();
         const token = data.session?.access_token;
         if (token) {
-          const grantBonus =
-            type === "signup" || type === "email" || type === "magiclink" || !type;
-          const completed = await completeAppSession(token, grantBonus);
+          const completed = await completeAppSession(token, true);
           if (cancelled) return;
-          window.history.replaceState({}, "", "/auth/confirmed");
           finishOk(completed.bonusGranted);
           return;
         }
@@ -82,8 +65,10 @@ export default function AuthConfirmedPage() {
         );
       } catch (err) {
         if (cancelled) return;
+        const raw = err instanceof Error ? err.message : String(err);
+        console.error("[auth.confirmed] failed:", raw, err);
         setStatus("error");
-        setMessage(translateAuthError(err));
+        setMessage(`${translateAuthError(err)}\n\n${REDIRECT_HINT}`);
       }
     })();
 
@@ -114,6 +99,14 @@ export default function AuthConfirmedPage() {
           >
             このウィンドウを閉じる
           </button>
+        ) : null}
+        {status === "error" ? (
+          <a
+            href="/"
+            className="mt-6 inline-flex min-h-12 items-center justify-center rounded-full border border-line px-5 text-[14px] font-bold"
+          >
+            トップへ戻る
+          </a>
         ) : null}
       </section>
     </main>

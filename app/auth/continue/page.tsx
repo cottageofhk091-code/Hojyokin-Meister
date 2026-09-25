@@ -36,15 +36,20 @@ export default function AuthContinuePage() {
             : null;
         const code = url.searchParams.get("code");
 
-        if (tokenHash && type) {
-          const { error } = await supabase.auth.verifyOtp({
-            token_hash: tokenHash,
-            type,
-          });
-          if (error) throw error;
-        } else if (code) {
+        if (tokenHash) {
+          const dest = new URL("/auth/callback", window.location.origin);
+          dest.search = url.search;
+          dest.searchParams.set("registered", "true");
+          window.location.replace(`${dest.pathname}${dest.search}`);
+          return;
+        }
+
+        if (code) {
           const { error } = await supabase.auth.exchangeCodeForSession(code);
-          if (error) throw error;
+          if (error) {
+            console.error("[auth.continue] exchangeCodeForSession:", error.message, error);
+            throw error;
+          }
         }
 
         const { data } = await supabase.auth.getSession();
@@ -62,7 +67,10 @@ export default function AuthContinuePage() {
           return;
         }
 
-        const grantBonus = type === "signup" || type === "email";
+        const grantBonus =
+          type === "signup" ||
+          type === "email" ||
+          url.searchParams.get("registered") === "true";
         const res = await fetch("/api/auth/complete", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -78,12 +86,12 @@ export default function AuthContinuePage() {
         }
         if (completed.bonusGranted || type === "signup" || type === "email") {
           notifySignupConfirmed({ bonusGranted: Boolean(completed.bonusGranted) });
-          router.replace("/auth/confirmed");
-          return;
         }
-        router.replace("/");
+        router.replace("/?registered=true");
       } catch (err) {
         if (cancelled) return;
+        const raw = err instanceof Error ? err.message : String(err);
+        console.error("[auth.continue] failed:", raw, err);
         setMessage(translateAuthError(err));
       }
     })();

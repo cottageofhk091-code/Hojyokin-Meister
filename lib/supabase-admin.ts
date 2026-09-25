@@ -1,5 +1,5 @@
 import { createClient, type EmailOtpType } from "@supabase/supabase-js";
-import { getAppBaseUrl } from "@/lib/auth/base-url";
+import { getPublicAppUrl } from "@/lib/auth/base-url";
 import {
   getSupabaseAnonKey,
   getSupabaseServiceRoleKey,
@@ -7,6 +7,7 @@ import {
 } from "@/lib/supabase-env";
 
 export type AuthLinkKind = "signup" | "recovery" | "magiclink";
+export { getPublicAppUrl };
 
 export function getSupabasePublicAuthClient() {
   const url = getSupabaseUrl();
@@ -32,40 +33,21 @@ export function getSupabaseAdmin() {
   });
 }
 
-export function getPublicAppUrl(req?: Request): string {
-  const env = firstAppUrl();
-  if (env) return env;
-  if (req) return getAppBaseUrl(req);
-  return "http://localhost:3000";
-}
-
-function firstAppUrl(): string {
-  const raw = (
-    process.env.NEXT_PUBLIC_APP_URL ||
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    ""
-  )
-    .trim()
-    .replace(/^["']|["']$/g, "")
-    .replace(/\/$/, "");
-  return raw;
-}
-
 export function buildAuthActionUrl(
   tokenHash: string,
   type: EmailOtpType,
   req?: Request,
 ): string {
   const base = getPublicAppUrl(req);
-  const path =
-    type === "recovery"
-      ? "/auth/password-reset-notice"
-      : type === "signup"
-        ? "/auth/confirmed"
-        : "/auth/callback";
-  const url = new URL(path, `${base}/`);
+  const url = new URL(
+    type === "recovery" ? "/auth/password-reset-notice" : "/auth/callback",
+    `${base}/`,
+  );
   url.searchParams.set("token_hash", tokenHash);
   url.searchParams.set("type", type);
+  if (type === "signup" || type === "email" || type === "magiclink") {
+    url.searchParams.set("registered", "true");
+  }
   return url.toString();
 }
 
@@ -123,9 +105,7 @@ export async function generateAuthActionLink(input: {
   const redirectTo =
     input.type === "recovery"
       ? `${getPublicAppUrl(input.req)}/auth/password-reset-notice`
-      : input.type === "signup"
-        ? `${getPublicAppUrl(input.req)}/auth/confirmed`
-        : `${getPublicAppUrl(input.req)}/auth/callback`;
+      : `${getPublicAppUrl(input.req)}/auth/callback?registered=true`;
 
   const result =
     input.type === "signup"

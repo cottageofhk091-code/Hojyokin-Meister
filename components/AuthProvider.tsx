@@ -140,6 +140,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void refresh();
   }, [refresh]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("registered") !== "true") return;
+    setWelcomeMessage(SIGNUP_WELCOME_MESSAGE);
+    void refresh();
+    params.delete("registered");
+    const next = `${window.location.pathname}${params.toString() ? `?${params}` : ""}${window.location.hash}`;
+    window.history.replaceState({}, "", next);
+  }, [refresh]);
+
   const hydrateFromCookie = useCallback(
     async (opts?: { welcomeIfPending?: boolean }) => {
       if (applyingAuthRef.current || userRef.current) return;
