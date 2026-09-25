@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import { createClient, type EmailOtpType } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabaseClient";
 import { completeAppSession, notifyPasswordRecovery } from "@/lib/auth-client";
 import { translateAuthError } from "@/lib/auth-errors";
+import { getSupabaseAnonKey, getSupabaseUrl } from "@/lib/supabase-env";
 import { SITE_NAME } from "@/lib/site";
 import { useAuth } from "@/components/AuthProvider";
 
@@ -15,6 +17,23 @@ const SESSION_CACHE_KEY = "aim_recovery_session";
 type CachedSession = { access_token: string; refresh_token: string };
 
 let recoveryBootstrap: Promise<void> | null = null;
+let recoveryAuth: ReturnType<typeof createClient> | null = null;
+
+function getRecoveryAuth() {
+  if (recoveryAuth) return recoveryAuth;
+  const url = getSupabaseUrl();
+  const key = getSupabaseAnonKey();
+  if (!url || !key) return supabase;
+  recoveryAuth = createClient(url, key, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: false,
+      flowType: "implicit",
+    },
+  });
+  return recoveryAuth;
+}
 
 function readCachedSession(): CachedSession | null {
   try {
@@ -30,12 +49,17 @@ function readCachedSession(): CachedSession | null {
 
 async function applyRecoverySession(tokens: CachedSession) {
   sessionStorage.setItem(SESSION_CACHE_KEY, JSON.stringify(tokens));
-  const { error } = await supabase.auth.setSession(tokens);
+  const auth = getRecoveryAuth();
+  const { error } = await auth.auth.setSession(tokens);
   if (error) throw error;
+  await supabase.auth.setSession(tokens).catch((err) => {
+    console.error("[auth.reset-password] setSession(app):", err);
+  });
 }
 
 async function bootstrapRecoverySession() {
-  const existing = await supabase.auth.getSession();
+  const auth = getRecoveryAuth();
+  const existing = await auth.auth.getSession();
   if (existing.data.session) return;
 
   const cached = readCachedSession();
@@ -46,9 +70,9 @@ async function bootstrapRecoverySession() {
 
   const url = new URL(window.location.href);
   const hashParams = new URLSearchParams(url.hash.replace(/^#/, ""));
-  const tokenHash =
+  const token_hash =
     url.searchParams.get("token_hash") || hashParams.get("token_hash");
-  const typeRaw =
+  const type =
     url.searchParams.get("type") || hashParams.get("type") || "recovery";
   const code = url.searchParams.get("code") || hashParams.get("code");
   const accessToken =
@@ -70,28 +94,24 @@ async function bootstrapRecoverySession() {
       access_token: accessToken,
       refresh_token: refreshToken,
     });
-  } else if (tokenHash) {
-    const res = await fetch("/api/auth/verify-recovery", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        token_hash: tokenHash,
-        type: typeRaw || "recovery",
-      }),
+  } else if (token_hash) {
+    const { data, error } = await auth.auth.verifyOtp({
+      token_hash,
+      type: (type as EmailOtpType) || "recovery",
     });
-    const data = (await res.json().catch(() => ({}))) as {
-      error?: string;
-      access_token?: string;
-      refresh_token?: string;
-    };
-    if (!res.ok || !data.access_token || !data.refresh_token) {
-      console.error("[auth.reset-password] verify-recovery:", data.error);
-      throw new Error(data.error || "確認リンクの検証に失敗しました。");
+    if (error) {
+      console.error("[auth.reset-password] verifyOtp:", error.message, {
+        type: type || "recovery",
+        error,
+      });
+      throw error;
     }
-    await applyRecoverySession({
-      access_token: data.access_token,
-      refresh_token: data.refresh_token,
-    });
+    const access_token = data.session?.access_token;
+    const refresh_token = data.session?.refresh_token;
+    if (!access_token || !refresh_token) {
+      throw new Error("再設定用セッションを確立できませんでした。");
+    }
+    await applyRecoverySession({ access_token, refresh_token });
   } else if (code) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (error) {
@@ -102,9 +122,12 @@ async function bootstrapRecoverySession() {
     throw new Error("リンクが無効か、有効期限が切れています。");
   }
 
-  const { data } = await supabase.auth.getSession();
+  const { data } = await auth.auth.getSession();
   if (!data.session) {
-    throw new Error("再設定用セッションを確立できませんでした。");
+    const fallback = await supabase.auth.getSession();
+    if (!fallback.data.session) {
+      throw new Error("再設定用セッションを確立できませんでした。");
+    }
   }
   window.history.replaceState({}, "", "/auth/reset-password");
 }
@@ -159,9 +182,10 @@ export default function ResetPasswordPage() {
     setBusy(true);
     setMessage("");
     try {
-      const { error } = await supabase.auth.updateUser({ password });
+      const auth = getRecoveryAuth();
+      const { error } = await auth.auth.updateUser({ password });
       if (error) throw error;
-      const { data } = await supabase.auth.getSession();
+      const { data } = await auth.auth.getSession();
       const token = data.session?.access_token;
       if (token) {
         const session = await completeAppSession(token, false);

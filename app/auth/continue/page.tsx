@@ -40,6 +40,7 @@ export default function AuthContinuePage() {
           if (type === "recovery" || typeRaw === "recovery") {
             const dest = new URL("/auth/reset-password", window.location.origin);
             dest.search = url.search;
+            dest.searchParams.set("type", "recovery");
             dest.hash = url.hash;
             window.location.replace(`${dest.pathname}${dest.search}${dest.hash}`);
             return;

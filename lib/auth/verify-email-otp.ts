@@ -89,11 +89,35 @@ export async function verifyRecoveryOtp(input: {
   tokenHash: string;
   typeRaw?: string | null;
 }): Promise<VerifyOtpResult> {
-  const preferred = isOtpType(input.typeRaw ?? null) ? [input.typeRaw as EmailOtpType] : [];
-  const recoveryTypes: EmailOtpType[] = ["recovery", "email", "magiclink"];
-  const types = [
-    ...preferred,
-    ...recoveryTypes.filter((type) => !preferred.includes(type)),
-  ];
-  return verifyWithTypes(input.tokenHash, types);
+  const supabaseUrl = getSupabaseUrl();
+  const key = getSupabaseAnonKey() || getSupabaseServiceRoleKey();
+  if (!supabaseUrl || !key) {
+    throw new Error("認証サービスが設定されていません。");
+  }
+  const supabase = createClient(supabaseUrl, key, {
+    auth: { persistSession: false, autoRefreshToken: false, flowType: "implicit" },
+  });
+  const token_hash = input.tokenHash;
+  const type = input.typeRaw;
+  const { data, error } = await supabase.auth.verifyOtp({
+    token_hash,
+    type: (type as EmailOtpType) || "recovery",
+  });
+  if (error) {
+    console.error("[verifyOtp.recovery] failed:", error.message, {
+      type: type || "recovery",
+      error,
+    });
+    throw error;
+  }
+  const email = data.user?.email?.trim().toLowerCase();
+  if (!email) {
+    throw new Error("再設定用セッションを確立できませんでした。");
+  }
+  return {
+    email,
+    type: ((type as EmailOtpType) || "recovery") as EmailOtpType,
+    access_token: data.session?.access_token ?? null,
+    refresh_token: data.session?.refresh_token ?? null,
+  };
 }

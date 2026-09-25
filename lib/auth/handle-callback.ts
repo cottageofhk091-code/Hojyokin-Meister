@@ -12,9 +12,10 @@ export async function handleEmailAuthCallback(req: Request): Promise<NextRespons
   const code = url.searchParams.get("code");
   const registered = url.searchParams.get("registered") === "true";
 
-  if (typeRaw === "recovery") {
+  if ((typeRaw || "").toLowerCase() === "recovery") {
     const dest = new URL("/auth/reset-password", `${base}/`);
     dest.search = url.search;
+    if (!dest.searchParams.get("type")) dest.searchParams.set("type", "recovery");
     return NextResponse.redirect(dest);
   }
 
