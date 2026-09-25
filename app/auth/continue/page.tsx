@@ -34,17 +34,19 @@ export default function AuthContinuePage() {
           typeRaw && OTP_TYPES.has(typeRaw as EmailOtpType)
             ? (typeRaw as EmailOtpType)
             : null;
-        const code = url.searchParams.get("code");
+        const code =
+          url.searchParams.get("code") || hashParams.get("code");
+
+        if (type === "recovery" || typeRaw === "recovery") {
+          const dest = new URL("/auth/reset-password", window.location.origin);
+          dest.search = url.search;
+          dest.searchParams.set("type", "recovery");
+          dest.hash = url.hash;
+          window.location.replace(`${dest.pathname}${dest.search}${dest.hash}`);
+          return;
+        }
 
         if (tokenHash) {
-          if (type === "recovery" || typeRaw === "recovery") {
-            const dest = new URL("/auth/reset-password", window.location.origin);
-            dest.search = url.search;
-            dest.searchParams.set("type", "recovery");
-            dest.hash = url.hash;
-            window.location.replace(`${dest.pathname}${dest.search}${dest.hash}`);
-            return;
-          }
           const dest = new URL("/auth/callback", window.location.origin);
           dest.search = url.search;
           dest.searchParams.set("registered", "true");

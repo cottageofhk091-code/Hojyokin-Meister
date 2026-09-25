@@ -7,15 +7,20 @@ import { verifyEmailOtp } from "@/lib/auth/verify-email-otp";
 export async function handleEmailAuthCallback(req: Request): Promise<NextResponse> {
   const url = new URL(req.url);
   const base = getAppBaseUrl(req);
-  const tokenHash = url.searchParams.get("token_hash");
+  const tokenHash = url.searchParams.get("token_hash") || url.searchParams.get("token");
   const typeRaw = url.searchParams.get("type");
   const code = url.searchParams.get("code");
   const registered = url.searchParams.get("registered") === "true";
+  const isRecovery = (typeRaw || "").toLowerCase() === "recovery";
 
-  if ((typeRaw || "").toLowerCase() === "recovery") {
+  if (isRecovery) {
     const dest = new URL("/auth/reset-password", `${base}/`);
     dest.search = url.search;
-    if (!dest.searchParams.get("type")) dest.searchParams.set("type", "recovery");
+    dest.searchParams.set("type", "recovery");
+    if (tokenHash && !dest.searchParams.get("token_hash")) {
+      dest.searchParams.set("token_hash", tokenHash);
+    }
+    if (code && !dest.searchParams.get("code")) dest.searchParams.set("code", code);
     return NextResponse.redirect(dest);
   }
 

@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
-import { createClient, type EmailOtpType } from "@supabase/supabase-js";
+import { Suspense, useEffect, useState, type FormEvent } from "react";
+import { useSearchParams } from "next/navigation";
+import { createClient } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabaseClient";
 import { completeAppSession, notifyPasswordRecovery } from "@/lib/auth-client";
 import { translateAuthError } from "@/lib/auth-errors";
@@ -10,164 +11,173 @@ import { SITE_NAME } from "@/lib/site";
 import { useAuth } from "@/components/AuthProvider";
 
 const REDIRECT_HINT =
-  "Supabase の Authentication → URL Configuration で Site URL と Redirect URLs に https://hojyokin-meister-1.vercel.app/auth/reset-password および https://hojyokin-meister-1.vercel.app/** が含まれているか確認してください。";
+  "Supabase の Authentication → URL Configuration で Redirect URLs に https://hojyokin-meister-1.vercel.app/auth/reset-password と https://hojyokin-meister-1.vercel.app/** を追加してください。";
 
-const SESSION_CACHE_KEY = "aim_recovery_session";
+function mergeSearchParams(nextParams: URLSearchParams | null): URLSearchParams {
+  const merged = new URLSearchParams();
+  if (typeof window !== "undefined") {
+    const query = new URLSearchParams(window.location.search);
+    const hashRaw = window.location.hash.replace(/^#/, "");
+    const hashQuery = hashRaw.includes("?")
+      ? hashRaw.slice(hashRaw.indexOf("?") + 1)
+      : hashRaw;
+    const hash = new URLSearchParams(hashQuery);
+    for (const src of [query, hash]) {
+      src.forEach((value, key) => {
+        if (value && !merged.get(key)) merged.set(key, value);
+      });
+    }
+  }
+  nextParams?.forEach((value, key) => {
+    if (value && !merged.get(key)) merged.set(key, value);
+  });
+  return merged;
+}
 
-type CachedSession = { access_token: string; refresh_token: string };
+function formatVerifyError(error: unknown): string {
+  const rec =
+    error && typeof error === "object"
+      ? (error as { message?: unknown; code?: unknown; status?: unknown; name?: unknown })
+      : null;
+  const parts = [
+    rec && typeof rec.message === "string" ? rec.message : null,
+    rec && typeof rec.code === "string" ? `code=${rec.code}` : null,
+    rec && rec.status != null ? `status=${String(rec.status)}` : null,
+  ].filter(Boolean);
+  if (parts.length > 0) return parts.join(" / ");
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+}
 
-let recoveryBootstrap: Promise<void> | null = null;
-let recoveryAuth: ReturnType<typeof createClient> | null = null;
+let implicitClient: ReturnType<typeof createClient> | null = null;
 
-function getRecoveryAuth() {
-  if (recoveryAuth) return recoveryAuth;
+function getImplicitClient() {
+  if (implicitClient) return implicitClient;
   const url = getSupabaseUrl();
   const key = getSupabaseAnonKey();
   if (!url || !key) return supabase;
-  recoveryAuth = createClient(url, key, {
+  implicitClient = createClient(url, key, {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
-      detectSessionInUrl: false,
+      detectSessionInUrl: true,
       flowType: "implicit",
     },
   });
-  return recoveryAuth;
+  return implicitClient;
 }
 
-function readCachedSession(): CachedSession | null {
-  try {
-    const raw = sessionStorage.getItem(SESSION_CACHE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as CachedSession;
-    if (parsed.access_token && parsed.refresh_token) return parsed;
-  } catch {
-    // ignore
-  }
-  return null;
-}
-
-async function applyRecoverySession(tokens: CachedSession) {
-  sessionStorage.setItem(SESSION_CACHE_KEY, JSON.stringify(tokens));
-  const auth = getRecoveryAuth();
-  const { error } = await auth.auth.setSession(tokens);
-  if (error) throw error;
-  await supabase.auth.setSession(tokens).catch((err) => {
-    console.error("[auth.reset-password] setSession(app):", err);
-  });
-}
-
-async function bootstrapRecoverySession() {
-  const auth = getRecoveryAuth();
-  const existing = await auth.auth.getSession();
-  if (existing.data.session) return;
-
-  const cached = readCachedSession();
-  if (cached) {
-    await applyRecoverySession(cached);
-    return;
-  }
-
-  const url = new URL(window.location.href);
-  const hashParams = new URLSearchParams(url.hash.replace(/^#/, ""));
-  const token_hash =
-    url.searchParams.get("token_hash") || hashParams.get("token_hash");
-  const type =
-    url.searchParams.get("type") || hashParams.get("type") || "recovery";
-  const code = url.searchParams.get("code") || hashParams.get("code");
-  const accessToken =
-    hashParams.get("access_token") || url.searchParams.get("access_token");
-  const refreshToken =
-    hashParams.get("refresh_token") || url.searchParams.get("refresh_token");
-
-  if (url.searchParams.get("error") || hashParams.get("error")) {
-    const reason =
-      url.searchParams.get("error_description") ||
-      hashParams.get("error_description") ||
-      url.searchParams.get("error") ||
-      "確認リンクの検証に失敗しました。";
-    throw new Error(reason);
-  }
-
-  if (accessToken && refreshToken) {
-    await applyRecoverySession({
-      access_token: accessToken,
-      refresh_token: refreshToken,
-    });
-  } else if (token_hash) {
-    const { data, error } = await auth.auth.verifyOtp({
-      token_hash,
-      type: (type as EmailOtpType) || "recovery",
-    });
-    if (error) {
-      console.error("[auth.reset-password] verifyOtp:", error.message, {
-        type: type || "recovery",
-        error,
-      });
-      throw error;
-    }
-    const access_token = data.session?.access_token;
-    const refresh_token = data.session?.refresh_token;
-    if (!access_token || !refresh_token) {
-      throw new Error("再設定用セッションを確立できませんでした。");
-    }
-    await applyRecoverySession({ access_token, refresh_token });
-  } else if (code) {
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
-    if (error) {
-      console.error("[auth.reset-password] exchangeCodeForSession:", error.message, error);
-      throw error;
-    }
-  } else {
-    throw new Error("リンクが無効か、有効期限が切れています。");
-  }
-
-  const { data } = await auth.auth.getSession();
-  if (!data.session) {
-    const fallback = await supabase.auth.getSession();
-    if (!fallback.data.session) {
-      throw new Error("再設定用セッションを確立できませんでした。");
-    }
-  }
-  window.history.replaceState({}, "", "/auth/reset-password");
-}
-
-export default function ResetPasswordPage() {
+function ResetPasswordInner() {
+  const nextSearchParams = useSearchParams();
   const { applySession } = useAuth();
   const [status, setStatus] = useState<"working" | "form" | "done" | "error">("working");
   const [message, setMessage] = useState("再設定リンクを確認しています...");
+  const [detail, setDetail] = useState<string | null>(null);
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    if (!recoveryBootstrap) {
-      recoveryBootstrap = bootstrapRecoverySession().catch((err) => {
-        recoveryBootstrap = null;
-        throw err;
-      });
-    }
 
-    void recoveryBootstrap
-      .then(() => {
+    void (async () => {
+      try {
+        const searchParams = mergeSearchParams(nextSearchParams);
+        const token_hash =
+          searchParams.get("token_hash") ||
+          searchParams.get("token") ||
+          searchParams.get("code");
+        const type = searchParams.get("type") || "recovery";
+        const accessToken = searchParams.get("access_token");
+        const refreshToken = searchParams.get("refresh_token");
+
+        console.info("[auth.reset-password] params", {
+          has_token_hash: Boolean(searchParams.get("token_hash")),
+          has_token: Boolean(searchParams.get("token")),
+          has_code: Boolean(searchParams.get("code")),
+          type,
+          href: typeof window !== "undefined" ? window.location.href : "",
+        });
+
+        if (searchParams.get("error")) {
+          throw new Error(
+            searchParams.get("error_description") ||
+              searchParams.get("error") ||
+              "確認リンクの検証に失敗しました。",
+          );
+        }
+
+        const auth = getImplicitClient();
+
+        if (accessToken && refreshToken) {
+          const { error } = await auth.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+          if (error) throw error;
+        } else if (token_hash) {
+          const first = await supabase.auth.verifyOtp({
+            token_hash,
+            type: type as any,
+          });
+          let data = first.data;
+          let error = first.error;
+          if (error) {
+            console.error("Password reset verifyOtp error:", error);
+            const retry = await auth.auth.verifyOtp({
+              token_hash,
+              type: type as any,
+            });
+            data = retry.data;
+            error = retry.error;
+          }
+          if (error) {
+            const code = searchParams.get("code");
+            if (code && code !== searchParams.get("token_hash")) {
+              const exchanged = await supabase.auth.exchangeCodeForSession(code);
+              if (exchanged.error) {
+                console.error("Password reset verifyOtp error:", error);
+                throw error;
+              }
+            } else {
+              console.error("Password reset verifyOtp error:", error);
+              throw error;
+            }
+          } else if (!data.session) {
+            throw new Error("再設定用セッションを確立できませんでした。");
+          }
+        } else {
+          const existing = await auth.auth.getSession();
+          const fallback = await supabase.auth.getSession();
+          if (!existing.data.session && !fallback.data.session) {
+            throw new Error(
+              "リンクに token_hash / code が含まれていません。メール内のボタンから開き直してください。",
+            );
+          }
+        }
+
         if (cancelled) return;
         notifyPasswordRecovery();
+        window.history.replaceState({}, "", "/auth/reset-password");
         setStatus("form");
         setMessage("");
-      })
-      .catch((err) => {
+        setDetail(null);
+      } catch (err) {
         if (cancelled) return;
-        const raw = err instanceof Error ? err.message : String(err);
-        console.error("[auth.reset-password] failed:", raw, err);
+        console.error("Password reset verifyOtp error:", err);
         setStatus("error");
-        setMessage(`${translateAuthError(err)}\n\n${REDIRECT_HINT}`);
-      });
+        setMessage(translateAuthError(err));
+        setDetail(`${formatVerifyError(err)}\n\n${REDIRECT_HINT}`);
+      }
+    })();
 
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [nextSearchParams]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -182,19 +192,20 @@ export default function ResetPasswordPage() {
     setBusy(true);
     setMessage("");
     try {
-      const auth = getRecoveryAuth();
-      const { error } = await auth.auth.updateUser({ password });
-      if (error) throw error;
-      const { data } = await auth.auth.getSession();
-      const token = data.session?.access_token;
-      if (token) {
-        const session = await completeAppSession(token, false);
-        if (session.email) applySession(session);
+      const auth = getImplicitClient();
+      let { error } = await auth.auth.updateUser({ password });
+      if (error) {
+        const retry = await supabase.auth.updateUser({ password });
+        error = retry.error;
       }
-      try {
-        sessionStorage.removeItem(SESSION_CACHE_KEY);
-      } catch {
-        // ignore
+      if (error) throw error;
+      const session =
+        (await auth.auth.getSession()).data.session ||
+        (await supabase.auth.getSession()).data.session;
+      const token = session?.access_token;
+      if (token) {
+        const completed = await completeAppSession(token, false);
+        if (completed.email) applySession(completed);
       }
       setStatus("done");
       setMessage("パスワードを更新しました。トップページでログイン済みです。");
@@ -202,9 +213,9 @@ export default function ResetPasswordPage() {
         window.location.replace("/");
       }, 900);
     } catch (err) {
-      const raw = err instanceof Error ? err.message : String(err);
-      console.error("[auth.reset-password] update:", raw, err);
+      console.error("[auth.reset-password] update:", err);
       setMessage(translateAuthError(err));
+      setDetail(formatVerifyError(err));
     } finally {
       setBusy(false);
     }
@@ -227,9 +238,16 @@ export default function ResetPasswordPage() {
         </h1>
 
         {status === "working" || status === "error" || status === "done" ? (
-          <p className="mt-4 text-center text-[15px] leading-7 text-muted whitespace-pre-wrap">
-            {message}
-          </p>
+          <>
+            <p className="mt-4 text-center text-[15px] leading-7 text-muted whitespace-pre-wrap">
+              {message}
+            </p>
+            {detail ? (
+              <pre className="mt-4 max-h-48 overflow-auto whitespace-pre-wrap rounded-2xl bg-[#fff8ee] px-4 py-3 text-left text-[12px] leading-6 text-[#9a3412]">
+                {detail}
+              </pre>
+            ) : null}
+          </>
         ) : (
           <form onSubmit={(e) => void submit(e)} className="mt-4 space-y-4">
             <p className="text-[14px] leading-7 text-muted">
@@ -280,5 +298,19 @@ export default function ResetPasswordPage() {
         ) : null}
       </section>
     </main>
+  );
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="flex flex-1 items-center justify-center px-5 py-16 text-[15px] font-semibold text-muted">
+          再設定リンクを確認しています...
+        </main>
+      }
+    >
+      <ResetPasswordInner />
+    </Suspense>
   );
 }
