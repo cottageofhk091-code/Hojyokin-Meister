@@ -8,7 +8,7 @@ export default function AuthResetPage() {
 
   useEffect(() => {
     router.replace(
-      `/auth/password-reset-notice${window.location.search}${window.location.hash}`,
+      `/auth/reset-password${window.location.search}${window.location.hash}`,
     );
   }, [router]);
 

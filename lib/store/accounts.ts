@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from "fs/promises";
 import path from "path";
 import { isValidEmail, normalizeEmail } from "@/lib/auth/session";
-import { isSavedPlan } from "@/lib/history";
+import { inputFingerprint, isSavedPlan } from "@/lib/history";
 import { LIMIT_MESSAGE, MAX_PROPOSALS } from "@/lib/proposals-limits";
 import type { SavedPlan } from "@/lib/types";
 
@@ -220,7 +220,7 @@ export async function getProposal(
 export async function saveProposal(
   email: string,
   plan: SavedPlan,
-  options?: { replaceOldest?: boolean },
+  _options?: { replaceOldest?: boolean },
 ): Promise<{ plan: SavedPlan; proposals: SavedPlan[]; replacedId?: string }> {
   if (!isSavedPlan(plan)) {
     throw new Error("保存データの形式が正しくありません。");
@@ -229,29 +229,38 @@ export async function saveProposal(
     const key = normalizeEmail(email);
     const store = await readStore();
     const account = store.accounts[key] ?? emptyAccount(key);
-    const existingIndex = account.proposals.findIndex((item) => item.id === plan.id);
+    const fingerprint = inputFingerprint(plan);
+    const duplicate = account.proposals.find(
+      (item) => inputFingerprint(item) === fingerprint,
+    );
     let replacedId: string | undefined;
+    const nextPlan: SavedPlan = duplicate
+      ? { ...plan, id: duplicate.id, savedAt: new Date().toISOString() }
+      : plan;
 
-    if (existingIndex >= 0) {
-      account.proposals[existingIndex] = plan;
-    } else if (account.proposals.length >= MAX_PROPOSALS) {
-      if (!options?.replaceOldest) {
-        throw new LimitReachedError(oldestPlan(account.proposals));
-      }
-      const oldest = oldestPlan(account.proposals);
-      if (oldest) {
-        account.proposals = account.proposals.filter((item) => item.id !== oldest.id);
-        replacedId = oldest.id;
-      }
-      account.proposals.push(plan);
+    if (duplicate) {
+      account.proposals = account.proposals.filter((item) => item.id !== duplicate.id);
+      account.proposals.unshift(nextPlan);
     } else {
-      account.proposals.push(plan);
+      const existingIndex = account.proposals.findIndex((item) => item.id === nextPlan.id);
+      if (existingIndex >= 0) {
+        account.proposals[existingIndex] = nextPlan;
+      } else if (account.proposals.length >= MAX_PROPOSALS) {
+        const oldest = oldestPlan(account.proposals);
+        if (oldest) {
+          account.proposals = account.proposals.filter((item) => item.id !== oldest.id);
+          replacedId = oldest.id;
+        }
+        account.proposals.unshift(nextPlan);
+      } else {
+        account.proposals.unshift(nextPlan);
+      }
     }
 
     account.proposals = sortPlans(account.proposals).slice(0, MAX_PROPOSALS);
     store.accounts[key] = account;
     await writeStore(store);
-    return { plan, proposals: account.proposals, replacedId };
+    return { plan: nextPlan, proposals: account.proposals, replacedId };
   });
 }
 

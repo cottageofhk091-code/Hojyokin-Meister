@@ -37,6 +37,13 @@ export default function AuthContinuePage() {
         const code = url.searchParams.get("code");
 
         if (tokenHash) {
+          if (type === "recovery" || typeRaw === "recovery") {
+            const dest = new URL("/auth/reset-password", window.location.origin);
+            dest.search = url.search;
+            dest.hash = url.hash;
+            window.location.replace(`${dest.pathname}${dest.search}${dest.hash}`);
+            return;
+          }
           const dest = new URL("/auth/callback", window.location.origin);
           dest.search = url.search;
           dest.searchParams.set("registered", "true");
@@ -63,7 +70,7 @@ export default function AuthContinuePage() {
           url.searchParams.get("type") === "recovery";
         if (recovered) {
           notifyPasswordRecovery();
-          router.replace("/auth/password-reset-notice");
+          router.replace(`/auth/reset-password${url.search}${url.hash}`);
           return;
         }
 

@@ -7,7 +7,6 @@ import {
   Maximize2,
   Minimize2,
   Send,
-  Sparkles,
   Square,
   Trash2,
   X,
@@ -78,7 +77,6 @@ export function MeisterChatDock({
   unlocked: boolean;
   context: ChatContext;
 }) {
-  const [welcome, setWelcome] = useState(true);
   const [turns, setTurns] = useState<ChatMessage[]>(initialChatMessages);
   const [historyReady, setHistoryReady] = useState(false);
   const [sessionId, setSessionId] = useState(0);
@@ -96,12 +94,6 @@ export function MeisterChatDock({
     if (!historyReady) return;
     saveChatHistory(turns);
   }, [turns, historyReady]);
-
-  useEffect(() => {
-    setWelcome(true);
-    const id = window.setTimeout(() => setWelcome(false), 12000);
-    return () => window.clearTimeout(id);
-  }, [context.result.plan.title]);
 
   useEffect(() => {
     function onViewport() {
@@ -158,51 +150,19 @@ export function MeisterChatDock({
       {!open ? (
         <div className="pointer-events-none fixed right-6 bottom-6 z-50 flex flex-col items-end">
           <div className="relative flex flex-col items-end">
-            {welcome ? (
-              <div
-                role="status"
-                className="chat-welcome pointer-events-auto mb-3 w-[min(calc(100vw-3.5rem),20rem)] rounded-[18px] border border-[#F59E0B]/50 bg-gradient-to-br from-[#0F172A] to-[#1E293B] px-3.5 py-3 text-white shadow-[0_16px_40px_rgba(15,23,42,0.28)]"
-              >
-                <p className="flex items-center gap-1.5 text-[11px] font-bold tracking-wide text-[#F59E0B]">
-                  <Sparkles size={13} />
-                  申請書が完成しました！
-                </p>
-                <p className="mt-1.5 text-[12px] font-medium leading-5 text-white/90 sm:text-[13px] sm:leading-6">
-                  地域独自の補助金や修正したい点について、ここで何でも質問してください
-                </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setWelcome(false);
-                    onOpenChange(true);
-                  }}
-                  className="mt-3 inline-flex min-h-9 w-full items-center justify-center rounded-full bg-gradient-to-r from-[#D97706] to-[#F59E0B] text-[12px] font-bold text-[#0F172A]"
-                >
-                  今すぐ相談する
-                </button>
-              </div>
-            ) : null}
             <div className="relative">
-              {!welcome ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setWelcome(false);
-                    onOpenChange(true);
-                  }}
-                  className="chat-speech chat-bubble pointer-events-auto absolute right-0 bottom-full mb-3 w-max max-w-[min(calc(100vw-5.5rem),11.5rem)] rounded-[16px] border border-[#F59E0B]/50 bg-white px-3 py-2 text-left shadow-[0_10px_24px_rgba(15,23,42,0.14)] sm:max-w-none sm:px-3.5 sm:py-2.5"
-                >
-                  <p className="text-[12px] font-bold leading-5 text-brand sm:text-[13px]">
-                    💡 AIマイスターに相談
-                  </p>
-                </button>
-              ) : null}
               <button
                 type="button"
-                onClick={() => {
-                  setWelcome(false);
-                  onOpenChange(true);
-                }}
+                onClick={() => onOpenChange(true)}
+                className="chat-speech chat-bubble pointer-events-auto absolute right-0 bottom-full mb-3 w-max max-w-[min(calc(100vw-5.5rem),11.5rem)] rounded-[16px] border border-[#F59E0B]/50 bg-white px-3 py-2 text-left shadow-[0_10px_24px_rgba(15,23,42,0.14)] sm:max-w-none sm:px-3.5 sm:py-2.5"
+              >
+                <p className="text-[12px] font-bold leading-5 text-brand sm:text-[13px]">
+                  💡 AIマイスターに相談
+                </p>
+              </button>
+              <button
+                type="button"
+                onClick={() => onOpenChange(true)}
                 className="chat-fab pointer-events-auto relative z-10 inline-flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-[#D97706] to-[#F59E0B] text-[#0F172A] sm:h-[4.25rem] sm:w-[4.25rem]"
                 aria-expanded={open}
                 aria-label="AIマイスターに相談する"

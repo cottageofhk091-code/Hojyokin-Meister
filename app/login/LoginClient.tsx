@@ -11,7 +11,9 @@ function LoginContent() {
   const { user, loading } = useAuth();
   const next = searchParams.get("next") || "/mypage";
   const safeNext = next.startsWith("/") ? next : "/mypage";
-  const initialMode = searchParams.get("mode") === "signup" ? "signup" : "login";
+  const modeParam = searchParams.get("mode");
+  const initialMode =
+    modeParam === "signup" ? "signup" : modeParam === "forgot" ? "forgot" : "login";
 
   useEffect(() => {
     if (!loading && user?.email) router.replace(safeNext);

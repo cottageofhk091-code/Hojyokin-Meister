@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const GENERIC_OK =
-  "パスワード再設定用のメールを送りました。メール内のボタンを押したあと、この画面に戻って新しいパスワードを入力してください。このタブは開いたままお待ちください。";
+  "パスワード再設定用のメールを送りました。メール内のボタンから新しいパスワードを設定してください。";
 
 export async function POST(req: Request) {
   try {

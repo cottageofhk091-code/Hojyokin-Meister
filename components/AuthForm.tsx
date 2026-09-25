@@ -3,10 +3,10 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { useAuth } from "@/components/AuthProvider";
+import { ForgotPasswordModal } from "@/components/ForgotPasswordModal";
 import { supabase } from "@/lib/supabaseClient";
 import {
   completeAppSession,
-  markPendingRecovery,
   markPendingSignup,
 } from "@/lib/auth-client";
 import { translateAuthError } from "@/lib/auth-errors";
@@ -22,7 +22,10 @@ export function AuthForm({
   initialMode?: "login" | "signup" | "forgot";
 }) {
   const { applySession, refresh } = useAuth();
-  const [mode, setMode] = useState<"login" | "signup" | "forgot" | "sent">(initialMode);
+  const [mode, setMode] = useState<"login" | "signup" | "sent">(
+    initialMode === "signup" ? "signup" : "login",
+  );
+  const [forgotOpen, setForgotOpen] = useState(initialMode === "forgot");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
@@ -84,39 +87,12 @@ export function AuthForm({
     }
   }
 
-  async function handleForgot(event: FormEvent) {
-    event.preventDefault();
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/auth/recovery", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
-      });
-      const data = (await res.json()) as { error?: string; message?: string };
-      if (!res.ok) throw new Error(data.error || "パスワード再設定メールの送信に失敗しました");
-      markPendingRecovery(email);
-      setMode("sent");
-      setInfo(
-        data.message ||
-          "パスワード再設定用のメールを送りました。メール内のボタンを押したあと、この画面に戻って新しいパスワードを入力してください。このタブは開いたままお待ちください。",
-      );
-    } catch (err) {
-      setError(translateAuthError(err));
-    } finally {
-      setLoading(false);
-    }
-  }
-
   const title =
     mode === "signup"
       ? "新規登録"
-      : mode === "forgot"
-        ? "パスワード再設定"
-        : mode === "sent"
-          ? "メールを確認してください"
-          : "ログイン";
+      : mode === "sent"
+        ? "メールを確認してください"
+        : "ログイン";
 
   return (
     <div className="space-y-4">
@@ -124,11 +100,9 @@ export function AuthForm({
       <p className="text-[13px] leading-6 text-muted">
         {mode === "signup"
           ? "メールアドレスとパスワードで登録します。登録後、確認メールのリンクをクリックすると完了します。"
-          : mode === "forgot"
-            ? "登録済みのメールアドレスを入力してください。再設定用のリンクをお送りします。確認後、この画面で新しいパスワードを入力できます。"
-            : mode === "sent"
-              ? info
-              : "メールアドレスとパスワードでログインするか、新規登録してください。"}
+          : mode === "sent"
+            ? info
+            : "メールアドレスとパスワードでログインするか、新規登録してください。"}
       </p>
       {error ? <p className="text-[13px] text-[#c41e3a]">{error}</p> : null}
 
@@ -175,7 +149,7 @@ export function AuthForm({
             type="button"
             className="w-full text-left text-[12px] font-semibold text-muted hover:text-accent"
             onClick={() => {
-              setMode("forgot");
+              setForgotOpen(true);
               setError(null);
             }}
           >
@@ -263,43 +237,6 @@ export function AuthForm({
         </form>
       ) : null}
 
-      {mode === "forgot" ? (
-        <form onSubmit={(e) => void handleForgot(e)} className="space-y-4">
-          <div>
-            <label htmlFor="forgot-email" className="block text-[13px] font-semibold">
-              メールアドレス
-            </label>
-            <input
-              id="forgot-email"
-              type="email"
-              required
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              className={INPUT_CLASS}
-            />
-          </div>
-          <button
-            type="submit"
-            disabled={loading}
-            className="inline-flex min-h-11 w-full items-center justify-center rounded-full bg-gradient-to-r from-[#D97706] to-[#F59E0B] px-4 text-[14px] font-bold text-[#0F172A] disabled:opacity-60"
-          >
-            {loading ? "送信中..." : "再設定メールを送る"}
-          </button>
-          <button
-            type="button"
-            className="w-full text-[12px] font-semibold text-muted hover:text-accent"
-            onClick={() => {
-              setMode("login");
-              setError(null);
-            }}
-          >
-            ログインに戻る
-          </button>
-        </form>
-      ) : null}
-
       {mode === "sent" ? (
         <button
           type="button"
@@ -313,6 +250,8 @@ export function AuthForm({
           ログイン画面に戻る
         </button>
       ) : null}
+
+      <ForgotPasswordModal open={forgotOpen} onClose={() => setForgotOpen(false)} />
     </div>
   );
 }

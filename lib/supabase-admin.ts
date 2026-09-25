@@ -40,7 +40,7 @@ export function buildAuthActionUrl(
 ): string {
   const base = getPublicAppUrl(req);
   const url = new URL(
-    type === "recovery" ? "/auth/password-reset-notice" : "/auth/callback",
+    type === "recovery" ? "/auth/reset-password" : "/auth/callback",
     `${base}/`,
   );
   url.searchParams.set("token_hash", tokenHash);
@@ -104,7 +104,7 @@ export async function generateAuthActionLink(input: {
   const admin = getSupabaseAdmin();
   const redirectTo =
     input.type === "recovery"
-      ? `${getPublicAppUrl(input.req)}/auth/password-reset-notice`
+      ? `${getPublicAppUrl(input.req)}/auth/reset-password`
       : `${getPublicAppUrl(input.req)}/auth/callback?registered=true`;
 
   const result =

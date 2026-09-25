@@ -3,7 +3,7 @@ export type ChatMessage = { role: "user" | "assistant"; content: string };
 export const CHAT_HISTORY_KEY = "ai_meister_chat_history";
 
 export const CHAT_WELCOME =
-  "申請書が完成しました！地域独自の補助金や修正したい点について、ここで何でも質問してください";
+  "地域独自の補助金や修正したい点について、ここで質問できます。";
 
 export function initialChatMessages(): ChatMessage[] {
   return [{ role: "assistant", content: CHAT_WELCOME }];

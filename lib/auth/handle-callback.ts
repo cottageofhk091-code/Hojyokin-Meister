@@ -13,7 +13,7 @@ export async function handleEmailAuthCallback(req: Request): Promise<NextRespons
   const registered = url.searchParams.get("registered") === "true";
 
   if (typeRaw === "recovery") {
-    const dest = new URL("/auth/password-reset-notice", `${base}/`);
+      const dest = new URL("/auth/reset-password", `${base}/`);
     dest.search = url.search;
     return NextResponse.redirect(dest);
   }

@@ -66,6 +66,7 @@ function isAuthHelperPage(): boolean {
   const path = window.location.pathname;
   return (
     path.startsWith("/auth/password-reset-notice") ||
+    path.startsWith("/auth/reset-password") ||
     path.startsWith("/auth/confirmed") ||
     path.startsWith("/auth/continue") ||
     path.startsWith("/auth/reset")

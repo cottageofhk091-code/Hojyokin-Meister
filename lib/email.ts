@@ -117,7 +117,7 @@ export async function sendPasswordResetEmail(
 ): Promise<{ sent: boolean; error?: string }> {
   const subject = `【${AUTH_APP_NAME}】パスワード再設定のご案内`;
   const heading = "パスワードの再設定";
-  const body = `${AUTH_APP_NAME} のパスワード再設定リクエストを受け付けました。\n下のボタンを押して認証を完了したあと、元の画面に戻って新しいパスワードを入力してください。`;
+  const body = `${AUTH_APP_NAME} のパスワード再設定リクエストを受け付けました。\n下のボタンを押して、新しいパスワードを設定してください。`;
   return sendAppEmail({
     to,
     subject,
@@ -125,7 +125,7 @@ export async function sendPasswordResetEmail(
     html: buttonEmailHtml({
       heading,
       body,
-      buttonLabel: "認証を完了する",
+      buttonLabel: "新しいパスワードを設定する",
       actionUrl,
     }),
   });

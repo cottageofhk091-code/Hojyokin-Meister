@@ -18,6 +18,31 @@ const NAV_ITEMS: Array<{ key: InfoModalKey; label: string }> = [
   { key: "faq", label: "よくある質問" },
 ];
 
+function TrialCreditBadge({ compact = false }: { compact?: boolean }) {
+  const { user, freeCredits } = useAuth();
+  if (!user?.email) return null;
+  if (user.is_subscribed) {
+    return (
+      <span className="inline-flex max-w-[11rem] truncate rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-bold text-[#FDE68A] sm:max-w-none sm:text-[12px]">
+        ✨ Proプラン
+      </span>
+    );
+  }
+  const label =
+    freeCredits > 0
+      ? compact
+        ? `🎁 残り ${freeCredits} 回`
+        : `🎁 Pro無料お試し：残り ${freeCredits} 回`
+      : compact
+        ? "🔒 終了"
+        : "🔒 Pro無料枠：終了";
+  return (
+    <span className="inline-flex max-w-[11.5rem] truncate rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-bold text-[#FDE68A] sm:max-w-none sm:text-[12px]">
+      {label}
+    </span>
+  );
+}
+
 export function Header() {
   const { user, signOut } = useAuth();
   const [open, setOpen] = useState(false);
@@ -50,6 +75,7 @@ export function Header() {
                 {item.label}
               </button>
             ))}
+            <TrialCreditBadge />
             <Link
               href="/mypage"
               className="ml-1 rounded-full px-3.5 py-2 text-[13px] font-medium text-[#FDE68A] hover:bg-white/5 hover:text-[#F59E0B]"
@@ -83,16 +109,19 @@ export function Header() {
             )}
           </nav>
 
-          <button
-            type="button"
-            className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-white lg:hidden"
-            aria-expanded={open}
-            aria-controls="mobile-nav"
-            aria-label={open ? "メニューを閉じる" : "メニューを開く"}
-            onClick={() => setOpen((value) => !value)}
-          >
-            {open ? <X size={22} /> : <Menu size={22} />}
-          </button>
+          <div className="flex items-center gap-2 lg:hidden">
+            <TrialCreditBadge compact />
+            <button
+              type="button"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-white"
+              aria-expanded={open}
+              aria-controls="mobile-nav"
+              aria-label={open ? "メニューを閉じる" : "メニューを開く"}
+              onClick={() => setOpen((value) => !value)}
+            >
+              {open ? <X size={22} /> : <Menu size={22} />}
+            </button>
+          </div>
         </div>
 
         {open ? (
@@ -113,6 +142,9 @@ export function Header() {
                   </button>
                 </li>
               ))}
+              <li className="px-3 py-2">
+                <TrialCreditBadge />
+              </li>
               <li>
                 <Link
                   href="/mypage"

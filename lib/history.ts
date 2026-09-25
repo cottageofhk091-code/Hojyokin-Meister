@@ -22,11 +22,38 @@ export function loadSavedPlans(): SavedPlan[] {
   }
 }
 
-export function savePlanToHistory(plan: SavedPlan) {
-  const current = loadSavedPlans().filter((item) => item.id !== plan.id);
-  const next = [plan, ...current].slice(0, 5);
+export function inputFingerprint(
+  plan: Pick<SavedPlan, "location" | "industry" | "subsidyType" | "userMemo">,
+): string {
+  const normalizeInput = (value: string) =>
+    value.trim().toLowerCase().replace(/\s+/g, " ");
+  return [
+    normalizeInput(plan.location || ""),
+    normalizeInput(plan.industry || ""),
+    normalizeInput(plan.subsidyType || ""),
+    normalizeInput(plan.userMemo || ""),
+  ].join("\u0001");
+}
+
+export function upsertPlanToHistory(plan: SavedPlan) {
+  const current = loadSavedPlans();
+  const key = inputFingerprint(plan);
+  const existing = current.find((item) => inputFingerprint(item) === key);
+  const nextPlan: SavedPlan = {
+    ...plan,
+    id: existing?.id ?? plan.id,
+    savedAt: new Date().toISOString(),
+  };
+  const next = [nextPlan, ...current.filter((item) => item.id !== nextPlan.id)].slice(
+    0,
+    5,
+  );
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   return next;
+}
+
+export function savePlanToHistory(plan: SavedPlan) {
+  return upsertPlanToHistory(plan);
 }
 
 export function deleteSavedPlan(id: string) {

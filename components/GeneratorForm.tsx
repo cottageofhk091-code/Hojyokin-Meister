@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
-import { useRouter } from "next/navigation";
 import {
   GeneratingProgress,
 } from "@/components/GeneratingStatus";
@@ -13,10 +12,9 @@ import { useAuth } from "@/components/AuthProvider";
 import { usePremium } from "@/components/PremiumProvider";
 import {
   fetchProposals,
-  LIMIT_MESSAGE,
   saveProposalToAccount,
 } from "@/lib/proposals-api";
-import { loadSavedPlans, resultToSavedPlan, savePlanToHistory } from "@/lib/history";
+import { loadSavedPlans, resultToSavedPlan, upsertPlanToHistory } from "@/lib/history";
 import type { SavedPlan } from "@/lib/types";
 import {
   INDUSTRY_OPTIONS,
@@ -38,9 +36,11 @@ const MEMO_PLACEHOLDER = `例）予約は電話のみで取りこぼしがある
 const FIELD_CLASS =
   "mt-2 w-full rounded-[16px] border border-line bg-[#fbfaf7] px-4 py-3 text-[15px] leading-7 text-foreground outline-none placeholder:text-[#94a3b8] focus:border-accent focus:bg-white focus:ring-4 focus:ring-accent/20";
 
+const RESET_BUTTON_CLASS =
+  "inline-flex min-h-10 items-center justify-center rounded-full border border-line bg-white px-4 text-[13px] font-bold text-muted transition hover:bg-[#f7f1e6] hover:text-foreground";
+
 export function GeneratorForm() {
-  const router = useRouter();
-  const { user, unlockProAccess, releaseProTrialUnlock } = useAuth();
+  const { user, releaseProTrialUnlock } = useAuth();
   const { isPremium } = usePremium();
   const [location, setLocation] = useState("");
   const [industryPreset, setIndustryPreset] = useState<IndustryOption | "">(
@@ -52,13 +52,14 @@ export function GeneratorForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<GenerateResult | null>(null);
-  const [mode, setMode] = useState<GenerateMode>("free");
   const [generatedMode, setGeneratedMode] = useState<GenerateMode>("free");
   const [saved, setSaved] = useState(false);
   const [saveWarning, setSaveWarning] = useState<string | null>(null);
   const [historyPlans, setHistoryPlans] = useState<SavedPlan[]>([]);
+  const [selectedHistoryId, setSelectedHistoryId] = useState("");
   const [chatOpen, setChatOpen] = useState(false);
   const resultRef = useRef<HTMLElement | null>(null);
+  const skipHistoryAutoloadRef = useRef(false);
   const unlockedMode: GenerateMode = isPremium ? "premium" : "free";
   const industry =
     industryPreset === "その他" ? industryCustom.trim() : industryPreset;
@@ -69,50 +70,74 @@ export function GeneratorForm() {
     userMemo.trim().length >= MIN_MEMO_LENGTH;
 
   useEffect(() => {
-    setMode(isPremium ? "premium" : "free");
-  }, [isPremium]);
-
-  useEffect(() => {
     if (!user) {
       setHistoryPlans(loadSavedPlans());
       return;
     }
     void fetchProposals()
       .then((data) => setHistoryPlans(data.proposals))
-      .catch(() => setHistoryPlans([]));
+      .catch(() => setHistoryPlans(loadSavedPlans()));
   }, [user]);
 
   useEffect(() => {
-    if (result) return;
+    if (result || skipHistoryAutoloadRef.current) return;
     const fromCheckout =
       typeof window !== "undefined" &&
       new URLSearchParams(window.location.search).get("success") === "true";
     if (!isPremium && !fromCheckout) return;
     const latest = historyPlans[0];
     if (!latest?.snapshot || !isGenerateResult(latest.snapshot)) return;
-    setResult(latest.snapshot);
-    setGeneratedMode(latest.snapshot.mode ?? "premium");
-    setLocation(latest.location);
-    if ((INDUSTRY_OPTIONS as readonly string[]).includes(latest.industry)) {
-      setIndustryPreset(latest.industry as IndustryOption);
-      setIndustryCustom("");
-    } else if (latest.industry) {
-      setIndustryPreset("その他");
-      setIndustryCustom(latest.industry);
-    }
-    if (isSubsidyType(latest.subsidyType)) {
-      setSubsidyType(latest.subsidyType);
-    }
-    if (latest.userMemo) setUserMemo(latest.userMemo);
-    setSaved(true);
+    skipHistoryAutoloadRef.current = true;
+    applyHistoryPlan(latest);
   }, [historyPlans, isPremium, result]);
+
+  function applyHistoryPlan(plan: SavedPlan) {
+    if (plan.snapshot && isGenerateResult(plan.snapshot)) {
+      setResult(plan.snapshot);
+      setGeneratedMode(plan.snapshot.mode ?? "premium");
+    }
+    setLocation(plan.location);
+    if ((INDUSTRY_OPTIONS as readonly string[]).includes(plan.industry)) {
+      setIndustryPreset(plan.industry as IndustryOption);
+      setIndustryCustom("");
+    } else if (plan.industry) {
+      setIndustryPreset("その他");
+      setIndustryCustom(plan.industry);
+    }
+    if (isSubsidyType(plan.subsidyType)) {
+      setSubsidyType(plan.subsidyType);
+    }
+    if (plan.userMemo) setUserMemo(plan.userMemo);
+    setSelectedHistoryId(plan.id);
+    setSaved(true);
+    setSaveWarning(null);
+  }
+
+  function resetInputs() {
+    skipHistoryAutoloadRef.current = true;
+    setLocation("");
+    setIndustryPreset("");
+    setIndustryCustom("");
+    setSubsidyType("");
+    setUserMemo("");
+    setResult(null);
+    setGeneratedMode("free");
+    setError(null);
+    setSaved(false);
+    setSaveWarning(null);
+    setSelectedHistoryId("");
+    setChatOpen(false);
+    setLoading(false);
+    releaseProTrialUnlock();
+  }
 
   async function persistPlan(
     plan: SavedPlan,
-    replaceOldest = false,
     options?: { promptLogin?: boolean },
   ) {
-    savePlanToHistory(plan);
+    const nextLocal = upsertPlanToHistory(plan);
+    setHistoryPlans(nextLocal);
+    setSelectedHistoryId(nextLocal[0]?.id ?? plan.id);
     if (!user) {
       setSaved(true);
       setSaveWarning(
@@ -120,23 +145,18 @@ export function GeneratorForm() {
           ? "マイページへ保存するにはログインしてください。"
           : null,
       );
-      setHistoryPlans(loadSavedPlans());
       return true;
     }
-    const result = await saveProposalToAccount(plan, replaceOldest);
+    const result = await saveProposalToAccount(nextLocal[0] ?? plan, true);
     if (result.ok) {
       setSaved(true);
       setSaveWarning(null);
       setHistoryPlans(result.proposals);
+      setSelectedHistoryId(result.plan.id);
       return true;
     }
-    if ("limitReached" in result && result.limitReached) {
-      setSaved(false);
-      setSaveWarning(LIMIT_MESSAGE);
-      return false;
-    }
-    setSaved(false);
-    setSaveWarning(result.error);
+    setSaved(true);
+    setSaveWarning(result.ok === false ? result.error : null);
     return false;
   }
 
@@ -200,7 +220,6 @@ export function GeneratorForm() {
         throw new Error("生成結果を取得できませんでした。");
       }
 
-      await unlockProAccess();
       setResult(data);
       setGeneratedMode(data.mode ?? "premium");
       setSaveWarning(null);
@@ -212,10 +231,9 @@ export function GeneratorForm() {
           userMemo: userMemo.trim(),
         }),
       );
-
-      // ★ 完了ページへ遷移してページビュー計測
-      router.push("/success");
-
+      window.requestAnimationFrame(() => {
+        resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
     } catch (err) {
       setError(
         err instanceof Error
@@ -232,7 +250,7 @@ export function GeneratorForm() {
     void generate();
   }
 
-  async function handleSave(replaceOldest = false) {
+  async function handleSave() {
     if (!result || !subsidyType) return;
     await persistPlan(
       resultToSavedPlan(result, {
@@ -241,7 +259,6 @@ export function GeneratorForm() {
         subsidyType,
         userMemo: userMemo.trim(),
       }),
-      replaceOldest,
       { promptLogin: true },
     );
   }
@@ -249,16 +266,43 @@ export function GeneratorForm() {
   function handleModeChange(next: GenerateMode) {
     if (next === "free") {
       releaseProTrialUnlock();
-      setMode("free");
       return;
     }
     if (user?.is_subscribed) {
-      setMode("premium");
       return;
     }
     if (next === "premium") return;
-    setMode("free");
   }
+
+  function handleHistorySelect(id: string) {
+    const plan = historyPlans.find((item) => item.id === id);
+    if (!plan) return;
+    applyHistoryPlan(plan);
+  }
+
+  const historySelect = historyPlans.length > 0 ? (
+    <label className="block text-[13px] font-semibold tracking-wide">
+      生成履歴（最新5件）
+      <select
+        value={selectedHistoryId}
+        onChange={(e) => handleHistorySelect(e.target.value)}
+        className={FIELD_CLASS}
+      >
+        <option value="">履歴から選ぶ</option>
+        {historyPlans.slice(0, 5).map((plan) => (
+          <option key={plan.id} value={plan.id}>
+            {new Date(plan.savedAt).toLocaleString("ja-JP", {
+              month: "numeric",
+              day: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            })}{" "}
+            / {plan.title || plan.subsidyType}
+          </option>
+        ))}
+      </select>
+    </label>
+  ) : null;
 
   return (
     <div id="generator" className="mx-auto w-full max-w-4xl scroll-mt-20">
@@ -266,7 +310,14 @@ export function GeneratorForm() {
         onSubmit={handleSubmit}
         className="card-luxury w-full rounded-[24px] border border-line bg-white p-5 sm:p-7"
       >
-        <PlanCompare value={unlockedMode} onChange={handleModeChange} />
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <PlanCompare value={unlockedMode} onChange={handleModeChange} />
+          <button type="button" onClick={resetInputs} className={RESET_BUTTON_CLASS}>
+            情報をリセット
+          </button>
+        </div>
+
+        {historySelect ? <div className="mt-5">{historySelect}</div> : null}
 
         <label
           htmlFor="location"
@@ -278,10 +329,7 @@ export function GeneratorForm() {
           id="location"
           type="text"
           value={location}
-          onChange={(e) => {
-            releaseProTrialUnlock();
-            setLocation(e.target.value);
-          }}
+          onChange={(e) => setLocation(e.target.value)}
           placeholder="例：三重県朝日町"
           autoComplete="address-level1"
           className={FIELD_CLASS}
@@ -296,10 +344,7 @@ export function GeneratorForm() {
         <select
           id="industry"
           value={industryPreset}
-          onChange={(e) => {
-            releaseProTrialUnlock();
-            setIndustryPreset(e.target.value as IndustryOption | "");
-          }}
+          onChange={(e) => setIndustryPreset(e.target.value as IndustryOption | "")}
           className={FIELD_CLASS}
         >
           <option value="">選択してください</option>
@@ -314,10 +359,7 @@ export function GeneratorForm() {
             id="industryCustom"
             type="text"
             value={industryCustom}
-            onChange={(e) => {
-              releaseProTrialUnlock();
-              setIndustryCustom(e.target.value);
-            }}
+            onChange={(e) => setIndustryCustom(e.target.value)}
             placeholder="業種を入力（例：農業、宿泊業）"
             className={`mt-2 ${FIELD_CLASS}`}
           />
@@ -332,10 +374,7 @@ export function GeneratorForm() {
         <select
           id="subsidyType"
           value={subsidyType}
-          onChange={(e) => {
-            releaseProTrialUnlock();
-            setSubsidyType(e.target.value as SubsidyType | "");
-          }}
+          onChange={(e) => setSubsidyType(e.target.value as SubsidyType | "")}
           className={FIELD_CLASS}
         >
           <option value="">選択してください</option>
@@ -360,10 +399,7 @@ export function GeneratorForm() {
         <textarea
           id="userMemo"
           value={userMemo}
-          onChange={(e) => {
-            releaseProTrialUnlock();
-            setUserMemo(e.target.value);
-          }}
+          onChange={(e) => setUserMemo(e.target.value)}
           rows={6}
           placeholder={MEMO_PLACEHOLDER}
           className={`mt-2 w-full resize-y ${FIELD_CLASS}`}
@@ -390,6 +426,12 @@ export function GeneratorForm() {
           )}
         </button>
 
+        <div className="mt-3 flex justify-center">
+          <button type="button" onClick={resetInputs} className={RESET_BUTTON_CLASS}>
+            情報をリセット
+          </button>
+        </div>
+
         <GeneratingProgress loading={loading} />
 
         {error ? (
@@ -404,6 +446,12 @@ export function GeneratorForm() {
 
       {result ? (
         <section ref={resultRef} className="mt-10">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            {historySelect}
+            <button type="button" onClick={resetInputs} className={RESET_BUTTON_CLASS}>
+              情報をリセット
+            </button>
+          </div>
           <ResultView
             result={result}
             mode={unlockedMode}
@@ -415,8 +463,8 @@ export function GeneratorForm() {
             }}
             saved={saved}
             saveWarning={saveWarning}
-            onSave={() => void handleSave(false)}
-            onReplaceOldest={() => void handleSave(true)}
+            onSave={() => void handleSave()}
+            onReplaceOldest={() => void handleSave()}
           />
         </section>
       ) : null}
