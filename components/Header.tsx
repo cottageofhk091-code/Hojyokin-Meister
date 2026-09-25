@@ -66,12 +66,20 @@ export function Header() {
                 ログアウト
               </button>
             ) : (
-              <Link
-                href="/login"
-                className="rounded-full px-3.5 py-2 text-[13px] font-medium text-white/80 hover:bg-white/5 hover:text-[#F59E0B]"
-              >
-                ログイン
-              </Link>
+              <>
+                <Link
+                  href="/login"
+                  className="rounded-full px-3.5 py-2 text-[13px] font-medium text-white/80 hover:bg-white/5 hover:text-[#F59E0B]"
+                >
+                  ログイン
+                </Link>
+                <Link
+                  href="/login?mode=signup"
+                  className="rounded-full px-3.5 py-2 text-[13px] font-medium text-white/80 hover:bg-white/5 hover:text-[#F59E0B]"
+                >
+                  新規登録
+                </Link>
+              </>
             )}
           </nav>
 
@@ -130,13 +138,22 @@ export function Header() {
                     ログアウト
                   </button>
                 ) : (
-                  <Link
-                    href="/login"
-                    className="block rounded-xl px-3 py-2.5 text-[14px] font-medium text-white/90 hover:bg-white/5"
-                    onClick={() => setOpen(false)}
-                  >
-                    ログイン
-                  </Link>
+                  <>
+                    <Link
+                      href="/login"
+                      className="block rounded-xl px-3 py-2.5 text-[14px] font-medium text-white/90 hover:bg-white/5"
+                      onClick={() => setOpen(false)}
+                    >
+                      ログイン
+                    </Link>
+                    <Link
+                      href="/login?mode=signup"
+                      className="block rounded-xl px-3 py-2.5 text-[14px] font-medium text-white/90 hover:bg-white/5"
+                      onClick={() => setOpen(false)}
+                    >
+                      新規登録
+                    </Link>
+                  </>
                 )}
               </li>
             </ul>

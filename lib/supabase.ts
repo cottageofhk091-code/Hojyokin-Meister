@@ -1,9 +1,15 @@
 import { createClient } from "@supabase/supabase-js";
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
+import { getSupabaseAnonKey, getSupabaseUrl } from "@/lib/supabase-env";
 
 export const supabase = createClient(
-  supabaseUrl || "https://placeholder.supabase.co",
-  supabaseAnonKey || "placeholder-anon-key",
+  getSupabaseUrl() || "https://placeholder.supabase.co",
+  getSupabaseAnonKey() || "placeholder-anon-key",
+  {
+    auth: {
+      persistSession: typeof window !== "undefined",
+      autoRefreshToken: typeof window !== "undefined",
+      detectSessionInUrl: typeof window !== "undefined",
+      flowType: "pkce",
+    },
+  },
 );

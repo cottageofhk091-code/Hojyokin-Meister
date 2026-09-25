@@ -40,7 +40,7 @@ const FIELD_CLASS =
 
 export function GeneratorForm() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, unlockProAccess, releaseProTrialUnlock } = useAuth();
   const { isPremium } = usePremium();
   const [location, setLocation] = useState("");
   const [industryPreset, setIndustryPreset] = useState<IndustryOption | "">(
@@ -163,6 +163,7 @@ export function GeneratorForm() {
     }
 
     setLoading(true);
+    releaseProTrialUnlock();
     try {
       const response = await fetch("/api/generate", {
         method: "POST",
@@ -199,6 +200,7 @@ export function GeneratorForm() {
         throw new Error("生成結果を取得できませんでした。");
       }
 
+      await unlockProAccess();
       setResult(data);
       setGeneratedMode(data.mode ?? "premium");
       setSaveWarning(null);
@@ -245,7 +247,12 @@ export function GeneratorForm() {
   }
 
   function handleModeChange(next: GenerateMode) {
-    if (isPremium) {
+    if (next === "free") {
+      releaseProTrialUnlock();
+      setMode("free");
+      return;
+    }
+    if (user?.is_subscribed) {
       setMode("premium");
       return;
     }
@@ -271,7 +278,10 @@ export function GeneratorForm() {
           id="location"
           type="text"
           value={location}
-          onChange={(e) => setLocation(e.target.value)}
+          onChange={(e) => {
+            releaseProTrialUnlock();
+            setLocation(e.target.value);
+          }}
           placeholder="例：三重県朝日町"
           autoComplete="address-level1"
           className={FIELD_CLASS}
@@ -286,9 +296,10 @@ export function GeneratorForm() {
         <select
           id="industry"
           value={industryPreset}
-          onChange={(e) =>
-            setIndustryPreset(e.target.value as IndustryOption | "")
-          }
+          onChange={(e) => {
+            releaseProTrialUnlock();
+            setIndustryPreset(e.target.value as IndustryOption | "");
+          }}
           className={FIELD_CLASS}
         >
           <option value="">選択してください</option>
@@ -303,7 +314,10 @@ export function GeneratorForm() {
             id="industryCustom"
             type="text"
             value={industryCustom}
-            onChange={(e) => setIndustryCustom(e.target.value)}
+            onChange={(e) => {
+              releaseProTrialUnlock();
+              setIndustryCustom(e.target.value);
+            }}
             placeholder="業種を入力（例：農業、宿泊業）"
             className={`mt-2 ${FIELD_CLASS}`}
           />
@@ -318,9 +332,10 @@ export function GeneratorForm() {
         <select
           id="subsidyType"
           value={subsidyType}
-          onChange={(e) =>
-            setSubsidyType(e.target.value as SubsidyType | "")
-          }
+          onChange={(e) => {
+            releaseProTrialUnlock();
+            setSubsidyType(e.target.value as SubsidyType | "");
+          }}
           className={FIELD_CLASS}
         >
           <option value="">選択してください</option>
@@ -345,7 +360,10 @@ export function GeneratorForm() {
         <textarea
           id="userMemo"
           value={userMemo}
-          onChange={(e) => setUserMemo(e.target.value)}
+          onChange={(e) => {
+            releaseProTrialUnlock();
+            setUserMemo(e.target.value);
+          }}
           rows={6}
           placeholder={MEMO_PLACEHOLDER}
           className={`mt-2 w-full resize-y ${FIELD_CLASS}`}

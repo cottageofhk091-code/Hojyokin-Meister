@@ -97,15 +97,25 @@ export async function verifyOtpChallenge(email: string, code: string) {
   return { ok: true as const };
 }
 
-export async function createSession(email: string) {
-  const token = await new SignJWT({ email })
+export async function createSessionToken(email: string) {
+  return new SignJWT({ email })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(email)
     .setIssuedAt()
     .setExpirationTime(`${SESSION_MAX_AGE}s`)
     .sign(secretKey());
+}
+
+export function formatSessionCookieHeader(token: string) {
+  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
+  return `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_MAX_AGE}${secure}`;
+}
+
+export async function createSession(email: string) {
+  const token = await createSessionToken(email);
   await setCookie(SESSION_COOKIE, token, SESSION_MAX_AGE);
   await clearCookie(OTP_COOKIE);
+  return token;
 }
 
 export async function getSessionUser(): Promise<SessionUser | null> {

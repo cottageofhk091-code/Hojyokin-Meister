@@ -37,7 +37,7 @@ export function usePremium() {
 }
 
 export function PremiumProvider({ children }: { children: ReactNode }) {
-  const { user, refresh, setSubscribed } = useAuth();
+  const { user, refresh, setSubscribed, canUseProFeatures } = useAuth();
   const [localPremium, setLocalPremium] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
@@ -47,7 +47,7 @@ export function PremiumProvider({ children }: { children: ReactNode }) {
     setLocalPremium(loadIsPremiumUser());
   }, []);
 
-  const isPremium = Boolean(user?.is_subscribed) || (!user && localPremium);
+  const isPremium = canUseProFeatures || (!user && localPremium);
 
   const markPremium = useCallback(() => {
     saveIsPremiumUser();

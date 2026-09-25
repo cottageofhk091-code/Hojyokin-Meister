@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/session";
-import { ensureAccount } from "@/lib/store/accounts";
+import { getAccountWithCredits } from "@/lib/profiles";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,11 +16,12 @@ export async function GET() {
   if (!session) {
     return json({ user: null });
   }
-  const account = await ensureAccount(session.email);
+  const account = await getAccountWithCredits(session.email);
   return json({
     user: {
       email: account.email,
       is_subscribed: account.is_subscribed,
+      free_credits: account.free_credits,
     },
   });
 }

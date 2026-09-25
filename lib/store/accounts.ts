@@ -14,6 +14,8 @@ export type AccountRecord = {
   stripe_session_id: string | null;
   subscribed_at: string | null;
   proposals: SavedPlan[];
+  free_credits: number;
+  signup_bonus_granted: boolean;
 };
 
 type StoreFile = {
@@ -53,6 +55,8 @@ function emptyAccount(email: string): AccountRecord {
     stripe_session_id: null,
     subscribed_at: null,
     proposals: [],
+    free_credits: 0,
+    signup_bonus_granted: false,
   };
 }
 
@@ -75,6 +79,7 @@ function normalizeAccount(value: unknown, email: string): AccountRecord {
   const proposals = Array.isArray(record.proposals)
     ? record.proposals.filter(isSavedPlan)
     : [];
+  const creditsRaw = Number(record.free_credits);
   return {
     email,
     is_subscribed: Boolean(record.is_subscribed),
@@ -89,6 +94,8 @@ function normalizeAccount(value: unknown, email: string): AccountRecord {
     subscribed_at:
       typeof record.subscribed_at === "string" ? record.subscribed_at : null,
     proposals: sortPlans(proposals).slice(0, MAX_PROPOSALS),
+    free_credits: Number.isFinite(creditsRaw) ? Math.max(0, Math.trunc(creditsRaw)) : 0,
+    signup_bonus_granted: Boolean(record.signup_bonus_granted),
   };
 }
 
@@ -245,6 +252,27 @@ export async function saveProposal(
     store.accounts[key] = account;
     await writeStore(store);
     return { plan, proposals: account.proposals, replacedId };
+  });
+}
+
+export async function saveCreditState(
+  email: string,
+  patch: { free_credits: number; signup_bonus_granted?: boolean },
+): Promise<AccountRecord> {
+  const key = normalizeEmail(email);
+  if (!isValidEmail(key)) {
+    throw new Error("メールアドレスが正しくありません。");
+  }
+  return enqueue(async () => {
+    const store = await readStore();
+    const account = store.accounts[key] ?? emptyAccount(key);
+    account.free_credits = Math.max(0, Math.trunc(patch.free_credits));
+    if (typeof patch.signup_bonus_granted === "boolean") {
+      account.signup_bonus_granted = patch.signup_bonus_granted;
+    }
+    store.accounts[key] = account;
+    await writeStore(store);
+    return account;
   });
 }
 
