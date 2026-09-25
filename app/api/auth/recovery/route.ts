@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { isValidEmail, normalizeEmail } from "@/lib/auth/session";
 import { sendPasswordResetEmail } from "@/lib/email";
-import { hasSupabaseAdminAuth } from "@/lib/supabase-env";
+import { getSupabaseAdminConfigError, hasSupabaseAdminAuth, logSupabaseEnvDiagnostics } from "@/lib/supabase-env";
 import { findAuthUserByEmail, generateAuthActionLink } from "@/lib/supabase-admin";
 
 export const runtime = "nodejs";
@@ -12,10 +12,13 @@ const GENERIC_OK =
 
 export async function POST(req: Request) {
   try {
-    if (!hasSupabaseAdminAuth()) {
+    logSupabaseEnvDiagnostics("auth.recovery");
+    const adminConfigError = getSupabaseAdminConfigError();
+    if (adminConfigError || !hasSupabaseAdminAuth()) {
       return NextResponse.json(
         {
           error:
+            adminConfigError ||
             "SUPABASE_SERVICE_ROLE_KEY が未設定です。Supabase 標準メールを使わず Resend で送るため、サービスロールキーが必要です。",
         },
         { status: 500 },

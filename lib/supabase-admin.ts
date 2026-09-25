@@ -23,7 +23,9 @@ export function getSupabaseAdmin() {
   const url = getSupabaseUrl();
   const key = getSupabaseServiceRoleKey();
   if (!url || !key) {
-    throw new Error("認証サービスが設定されていません。");
+    throw new Error(
+      "認証サービスが設定されていません。NEXT_PUBLIC_SUPABASE_URL と SUPABASE_SERVICE_ROLE_KEY を確認してください。",
+    );
   }
   return createClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
@@ -31,10 +33,22 @@ export function getSupabaseAdmin() {
 }
 
 export function getPublicAppUrl(req?: Request): string {
-  const env = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/$/, "");
+  const env = firstAppUrl();
   if (env) return env;
   if (req) return getAppBaseUrl(req);
   return "http://localhost:3000";
+}
+
+function firstAppUrl(): string {
+  const raw = (
+    process.env.NEXT_PUBLIC_APP_URL ||
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    ""
+  )
+    .trim()
+    .replace(/^["']|["']$/g, "")
+    .replace(/\/$/, "");
+  return raw;
 }
 
 export function buildAuthActionUrl(
