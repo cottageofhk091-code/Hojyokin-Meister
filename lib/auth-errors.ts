@@ -5,9 +5,8 @@ export function translateAuthError(error: unknown): string {
 
   const lower = raw.toLowerCase();
   const rules: Array<[RegExp, string]> = [
-    [/invalid login credentials|invalid_credentials/, "パスワードが違います"],
     [
-      /invalid.*(email|credentials|login)/,
+      /invalid login credentials|invalid_credentials|invalid.*(email|credentials|login)/,
       "メールアドレスまたはパスワードが正しくありません",
     ],
     [

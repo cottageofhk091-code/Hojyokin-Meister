@@ -2,15 +2,13 @@
 
 import { useState } from "react";
 import type { FormEvent } from "react";
-import { useAuth } from "@/components/AuthProvider";
 import { ForgotPasswordModal } from "@/components/ForgotPasswordModal";
-import { supabase } from "@/lib/supabaseClient";
-import {
-  completeAppSession,
-  markPendingSignup,
-} from "@/lib/auth-client";
+import { markPendingSignup } from "@/lib/auth-client";
 import { translateAuthError } from "@/lib/auth-errors";
-import { logSupabaseNetworkFailure } from "@/lib/supabase-network";
+import {
+  isSupabaseNetworkFailure,
+  logSupabaseNetworkFailure,
+} from "@/lib/supabase-network";
 
 const INPUT_CLASS =
   "mt-2 w-full rounded-[16px] border border-line bg-[#fbfaf7] px-4 py-3 text-[15px] outline-none focus:border-accent focus:bg-white focus:ring-4 focus:ring-accent/20";
@@ -22,7 +20,6 @@ export function AuthForm({
   onSuccess?: () => void;
   initialMode?: "login" | "signup" | "forgot";
 }) {
-  const { applySession, refresh } = useAuth();
   const [mode, setMode] = useState<"login" | "signup" | "sent">(
     initialMode === "signup" ? "signup" : "login",
   );
@@ -39,23 +36,41 @@ export function AuthForm({
     setLoading(true);
     setError(null);
     try {
-      const { data, error: authError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ email, password }),
+      }).catch((err: unknown) => {
+        logSupabaseNetworkFailure("auth.login", err);
+        throw err;
       });
-      if (authError) throw authError;
-      const token = data.session?.access_token;
-      if (!token) {
-        throw new Error(
-          "メールアドレスの確認が完了していません。確認メール内のリンクをクリックしてください。",
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        email?: string;
+        error?: string;
+      };
+      if (!res.ok || !data.ok || !data.email) {
+        const raw = data.error || "";
+        if (res.status === 0 || isSupabaseNetworkFailure({ status: res.status, message: raw })) {
+          logSupabaseNetworkFailure("auth.login", { status: res.status, message: raw });
+          setError("通信に失敗しました。しばらくしてから再度お試しください。");
+          return;
+        }
+        setError(
+          raw || "メールアドレスまたはパスワードが正しくありません",
         );
+        return;
       }
-      applySession(await completeAppSession(token, false));
-      await refresh();
       onSuccess?.();
+      window.location.reload();
     } catch (err) {
       logSupabaseNetworkFailure("auth.login", err);
-      setError(translateAuthError(err));
+      setError(
+        isSupabaseNetworkFailure(err)
+          ? "通信に失敗しました。しばらくしてから再度お試しください。"
+          : "メールアドレスまたはパスワードが正しくありません",
+      );
     } finally {
       setLoading(false);
     }
